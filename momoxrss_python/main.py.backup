@@ -1,0 +1,1108 @@
+import os
+import time
+import asyncio
+import sys
+# Imports système et monitoring
+import platform
+try:
+    import psutil
+except ImportError:
+    psutil = None
+    
+# Types pour une meilleure lisibilité du code
+from typing import List, Dict, Any, Optional, Union
+from bson.objectid import ObjectId
+from fastapi import FastAPI, HTTPException, Depends, Request, status
+from fastapi.responses import FileResponse, RedirectResponse
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from motor.motor_asyncio import AsyncIOMotorClient
+from dotenv import load_dotenv
+
+from models import FluxInDB, FluxCreate, FluxUpdate, RssArticle
+from discord_utils import isValidDiscordId, isValidUrl, send_to_discord, get_channel, get_guild_channels, initialize_discord_client, is_discord_ready, test_discord_connection, restart_discord_client
+from rss_checker import getItemLinkOrGuid, check_flux, parse_rss_feed, getItemDate
+from db import init_db, cleanup_old_entries
+
+# Load env
+load_dotenv()
+
+MONGO_URL = os.getenv("MONGO_URL", "mongodb://localhost:27017/momoxrss")
+API_KEY = os.getenv("API_KEY")
+ALLOWED_ORIGIN = os.getenv("ALLOWED_ORIGIN", "*")
+PORT = os.getenv("PORT", "3000")
+RSSHUB_BASE = os.getenv("RSSHUB_BASE", "https://rsshub.app").rstrip("/")
+DB_FALLBACK_NAME = os.getenv("MONGO_DB", "momoxrss")
+DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
+
+app = FastAPI(title="RSSDI API (Python)", version="3.6.0")
+scheduler = AsyncIOScheduler()
+client: Optional[AsyncIOMotorClient] = None
+fluxes_collection: Optional[Any] = None
+
+# Aggressive mode: all jobs at 10s
+aggressive_mode: bool = False
+
+# CORS
+origins = ["*"] if ALLOWED_ORIGIN == "*" else [ALLOWED_ORIGIN]
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Static dashboard
+app.mount("/static", StaticFiles(directory="static"), name="static")
+
+@app.on_event("startup")
+async def startup_event():
+    init_db()
+    try:
+        scheduler.add_job(cleanup_old_entries, 'cron', hour=3)
+    except Exception:
+        pass
+
+@app.get("/dashboard", response_class=FileResponse)
+async def get_dashboard() -> FileResponse:
+    path = os.path.join("static", "index.html")
+    if not os.path.isfile(path):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Dashboard introuvable (static/index.html).")
+    return FileResponse(path)
+
+@app.get("/", include_in_schema=False)
+async def root_redirect() -> RedirectResponse:
+    return RedirectResponse(url="/dashboard")
+
+def require_api_key(request: Request):
+    if not API_KEY:
+        return
+    client_key = request.headers.get("X-API-Key")
+    if not client_key or client_key != API_KEY:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Clé API invalide ou manquante.")
+
+# Resolve source URL into RSS
+def resolve_source_to_rss(url: str, source_type: Optional[str]) -> str:
+    """
+    Résout une URL source en URL RSS valide selon le type de source.
+    Gère les différents formats d'URL pour YouTube, Facebook, Instagram, TikTok.
+    """
+    if not source_type or source_type == "web":
+        return url
+        
+    try:
+        if source_type == "youtube":
+            # Channel ID direct
+            if "youtube.com/channel/" in url:
+                channel_id = url.split("youtube.com/channel/")[-1].split("/")[0].split("?")[0]
+                return f"https://www.youtube.com/feeds/videos.xml?channel_id={channel_id}"
+            # Channel handle (@username)
+            elif "youtube.com/@" in url:
+                username = url.split("youtube.com/@")[-1].split("/")[0].split("?")[0]
+                return f"https://www.youtube.com/feeds/videos.xml?user={username}"
+            # Legacy user format
+            elif "youtube.com/user/" in url:
+                username = url.split("youtube.com/user/")[-1].split("/")[0].split("?")[0]
+                return f"https://www.youtube.com/feeds/videos.xml?user={username}"
+            # Playlist
+            elif "list=" in url:
+                playlist_id = url.split("list=")[-1].split("&")[0]
+                return f"https://www.youtube.com/feeds/videos.xml?playlist_id={playlist_id}"
+            # Channel URL with c/ format
+            elif "youtube.com/c/" in url:
+                username = url.split("youtube.com/c/")[-1].split("/")[0].split("?")[0]
+                return f"https://www.youtube.com/feeds/videos.xml?user={username}"
+            return url
+            
+        elif source_type == "facebook":
+            if "facebook.com/" in url:
+                page = url.split("facebook.com/")[-1].split("/")[0].split("?")[0]
+                return f"{RSSHUB_BASE}/facebook/page/{page}"
+            return url
+            
+        elif source_type == "instagram":
+            if "instagram.com/" in url:
+                username = url.split("instagram.com/")[-1].split("/")[0].split("?")[0]
+                return f"{RSSHUB_BASE}/instagram/user/{username}"
+            return url
+            
+        elif source_type == "tiktok":
+            if "tiktok.com/@" in url:
+                username = url.split("tiktok.com/@")[-1].split("/")[0].split("?")[0]
+                return f"{RSSHUB_BASE}/tiktok/user/{username}"
+            return url
+            
+        return url
+        
+    except Exception as e:
+        print(f"Erreur lors de la résolution de l'URL {url} (type: {source_type}): {e}")
+        return url
+
+# DB and scheduler helpers
+def get_collection_or_503():
+    if fluxes_collection is None:
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, detail="DB non initialisée. Réessayez dans quelques secondes.")
+    return fluxes_collection
+
+async def _check_flux_job(flux: FluxInDB):
+    coll = get_collection_or_503()
+    try:
+        await check_flux(flux, coll)
+        # Effacer l'erreur si le flux fonctionne maintenant
+        await coll.update_one(
+            {"_id": ObjectId(flux.id)} if ObjectId.is_valid(flux.id) else {"_id": flux.id},
+            {"$unset": {"lastError": 1}}
+        )
+    except Exception as e:
+        # Enregistrer l'erreur dans la base de données
+        error_msg = str(e)
+        await coll.update_one(
+            {"_id": ObjectId(flux.id)} if ObjectId.is_valid(flux.id) else {"_id": flux.id},
+            {"$set": {"lastError": error_msg, "lastCheck": int(time.time() * 1000)}}
+        )
+        print(f"Erreur flux {flux.id}: {error_msg}")
+
+async def load_and_schedule_fluxes():
+    coll = get_collection_or_503()
+    # purge existing jobs
+    for job in scheduler.get_jobs():
+        try:
+            job.remove()
+        except Exception:
+            pass
+
+    docs = await coll.find({}).to_list(length=None)
+    count_active = 0
+    for doc in docs:
+        oid = doc.get("_id")
+        doc_id_str = str(oid) if isinstance(oid, ObjectId) else str(oid)
+        try:
+            flux = FluxInDB.model_validate({**{k: v for k, v in doc.items() if k != "_id"}, "id": doc_id_str})
+        except Exception as e:
+            print(f"Validation flux échouée: {e}")
+            continue
+        if flux.active:
+            count_active += 1
+            try:
+                seconds = 10 if aggressive_mode else max(60, flux.interval or 300)
+                scheduler.add_job(
+                    _check_flux_job,
+                    "interval",
+                    seconds=seconds,
+                    args=[flux],
+                    id=doc_id_str,
+                    name=f"{flux.name or doc_id_str} @ {flux.discordTarget}",
+                    coalesce=True,
+                    max_instances=1,
+                    replace_existing=True,
+                )
+            except Exception as e:
+                print(f"Planification échouée pour {doc_id_str}: {e}")
+    print(f"Scheduler: {len(docs)} flux, {count_active} actifs, {len(scheduler.get_jobs())} tâches. Mode agressif={aggressive_mode}")
+
+# Category scheduling/check
+async def check_category(category: str, coll):
+    fluxes = await coll.find({"category": category, "active": True}).to_list(length=None)
+    for doc in fluxes:
+        try:
+            flux = FluxInDB.model_validate({**{k: v for k, v in doc.items() if k != "_id"}, "id": str(doc["_id"])})
+            await check_flux(flux, coll)
+        except Exception as e:
+            print(f"Erreur catégorie {category}: {e}")
+
+def schedule_category(category: str, interval: int = 600):
+    try:
+        seconds = 10 if aggressive_mode else max(60, interval)
+        scheduler.add_job(
+            check_category,
+            "interval",
+            seconds=seconds,
+            args=[category, fluxes_collection],
+            id=f"cat_{category}",
+            name=f"category::{category}",
+            coalesce=True,
+            max_instances=1,
+            replace_existing=True
+        )
+    except Exception as e:
+        print(f"Planification catégorie {category} échouée: {e}")
+
+# Startup/shutdown
+@app.on_event("startup")
+async def startup_db_client():
+    global client, fluxes_collection
+    print(f"Démarrage RSSDI port {PORT} - Mongo URL: {MONGO_URL}")
+    try:
+        client = AsyncIOMotorClient(MONGO_URL)
+        db = client.get_default_database()
+        if db is None:
+            db = client[DB_FALLBACK_NAME]
+        fluxes_collection = db["fluxes"]
+        if not scheduler.running:
+            scheduler.start()
+        
+        # Initialiser le client Discord
+        print("Initialisation du client Discord...")
+        discord_client = await initialize_discord_client()
+        if discord_client:
+            print("✅ Client Discord initialisé")
+        else:
+            print("❌ Échec initialisation Discord - vérifiez DISCORD_TOKEN")
+            
+        await load_and_schedule_fluxes()
+    except Exception as e:
+        print(f"Startup error: {e}")
+
+@app.on_event("shutdown")
+async def shutdown_db_client():
+    global client
+    try:
+        if scheduler.running:
+            scheduler.shutdown()
+    except Exception:
+        pass
+    try:
+        if client:
+            client.close()
+    except Exception:
+        pass
+    print("API arrêtée.")
+
+# Stats
+@app.get("/api/v1/stats", response_model=Dict[str, Any])
+async def get_stats(_key=Depends(require_api_key)):
+    coll = get_collection_or_503()
+    job_count = len(scheduler.get_jobs())
+    total = await coll.count_documents({})
+    active = await coll.count_documents({"active": True})
+    total_sent = await coll.aggregate([{"$group": {"_id": None, "sum": {"$sum": {"$ifNull": ["$totalSent", 0]}}}}]).to_list(length=None)
+    return {
+        "schedulerStatus": "running" if scheduler.running else "stopped",
+        "jobCount": job_count,
+        "activeFluxCount": active,
+        "totalFluxCount": total,
+        "totalSent": (total_sent[0]["sum"] if total_sent else 0),
+        "categoryJobs": [j.id for j in scheduler.get_jobs() if j.id.startswith("cat_")],
+        "aggressiveMode": aggressive_mode
+    }
+
+# Aggressive mode toggle
+@app.post("/api/v1/aggressive-mode", response_model=Dict[str, Any])
+async def set_aggressive_mode(req: Request, _key=Depends(require_api_key)):
+    global aggressive_mode
+    body = await req.json()
+    enable = bool(body.get("enable", False))
+    aggressive_mode = enable
+    await load_and_schedule_fluxes()
+    return {"message": f"Mode agressif {'activé' if enable else 'désactivé'}", "aggressiveMode": aggressive_mode}
+
+# CRUD fluxes
+@app.get("/api/v1/fluxes", response_model=List[FluxInDB])
+async def list_fluxes(_key=Depends(require_api_key)):
+    coll = get_collection_or_503()
+    flux_list = await coll.find({}).to_list(length=None)
+    cleaned: List[Dict[str, Any]] = []
+    for doc in flux_list:
+        oid = doc.get("_id")
+        doc_copy = {k: v for k, v in doc.items() if k != "_id"}
+        if oid is not None:
+            doc_copy["id"] = str(oid)
+        cleaned.append(doc_copy)
+    return [FluxInDB.model_validate(doc) for doc in cleaned]
+
+@app.post("/api/v1/fluxes", response_model=FluxInDB, status_code=status.HTTP_201_CREATED)
+async def create_flux(flux_create: FluxCreate, _key=Depends(require_api_key)):
+    coll = get_collection_or_503()
+    if not isValidDiscordId(flux_create.discordTarget):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "ID Discord cible invalide.")
+    rss_url = resolve_source_to_rss(str(flux_create.rssUrl), flux_create.sourceType)
+    try:
+        await asyncio.to_thread(parse_rss_feed, rss_url)
+    except Exception as e:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail=f"L'URL RSS ne peut pas être parsée: {e}")
+    flux_data = flux_create.model_dump(exclude_none=True)
+    flux_data["rssUrl"] = rss_url
+    flux_data.update({
+        "active": True if flux_create.active is None else flux_create.active,
+        "lastItem": None,
+        "lastPubDate": None,
+        "threadId": None,
+        "lastCheck": int(time.time() * 1000),
+        "lastError": None,
+        "totalSent": 0
+    })
+    result = await coll.insert_one(flux_data)
+    new_doc = await coll.find_one({"_id": result.inserted_id})
+    cleaned = {k: v for k, v in new_doc.items() if k != "_id"}
+    cleaned["id"] = str(new_doc["_id"])
+    try:
+        await load_and_schedule_fluxes()
+    except HTTPException:
+        pass
+    return FluxInDB.model_validate(cleaned)
+
+@app.put("/api/v1/fluxes/{flux_id}", response_model=FluxInDB)
+async def update_flux(flux_id: str, flux_update: FluxUpdate, _key=Depends(require_api_key)):
+    coll = get_collection_or_503()
+    if not ObjectId.is_valid(flux_id):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "ID de flux invalide.")
+    update_data = flux_update.model_dump(exclude_none=True)
+
+    if update_data.get("discordTarget") and not isValidDiscordId(update_data["discordTarget"]):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Nouvel ID Discord cible invalide.")
+
+    if update_data.get("newRssUrl") or update_data.get("sourceType"):
+        new_url = update_data.get("newRssUrl")
+        source_type = update_data.get("sourceType")
+        if new_url:
+            new_url = resolve_source_to_rss(str(new_url), source_type)
+        else:
+            existing = await coll.find_one({"_id": ObjectId(flux_id)})
+            if not existing:
+                raise HTTPException(status.HTTP_404_NOT_FOUND, "Flux non trouvé.")
+            new_url = resolve_source_to_rss(str(existing.get("rssUrl")), source_type)
+        try:
+            await asyncio.to_thread(parse_rss_feed, new_url)
+            update_data["rssUrl"] = new_url
+            update_data.pop("newRssUrl", None)
+            update_data["lastItem"] = None
+            update_data["lastPubDate"] = None
+            update_data["threadId"] = None
+            update_data["lastError"] = None
+        except Exception as e:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, detail=f"La nouvelle URL RSS ne peut pas être parsée: {e}")
+
+    if not update_data:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Aucune donnée de mise à jour fournie.")
+
+    result = await coll.update_one({"_id": ObjectId(flux_id)}, {"$set": update_data})
+    if result.matched_count == 0:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Flux non trouvé.")
+
+    updated_doc = await coll.find_one({"_id": ObjectId(flux_id)})
+    cleaned = {k: v for k, v in updated_doc.items() if k != "_id"}
+    cleaned["id"] = str(updated_doc["_id"])
+    try:
+        await load_and_schedule_fluxes()
+    except HTTPException:
+        pass
+    return FluxInDB.model_validate(cleaned)
+
+@app.delete("/api/v1/fluxes/{flux_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_flux(flux_id: str, _key=Depends(require_api_key)):
+    coll = get_collection_or_503()
+    if not ObjectId.is_valid(flux_id):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "ID de flux invalide.")
+    result = await coll.delete_one({"_id": ObjectId(flux_id)})
+    if result.deleted_count == 0:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Flux non trouvé.")
+    try:
+        scheduler.remove_job(flux_id)
+    except Exception:
+        pass
+    try:
+        await load_and_schedule_fluxes()
+    except HTTPException:
+        pass
+    return
+
+# Preview RSS (POST for dashboard)
+@app.post("/api/v1/preview-rss", response_model=List[RssArticle])
+async def preview_rss(req: Request, _key=Depends(require_api_key)):
+    body = await req.json()
+    rss_url = body.get("rssUrl")
+    source_type = body.get("sourceType")
+    count = int(body.get("count", 10))
+    if not rss_url or not isValidUrl(rss_url):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "URL RSS invalide.")
+    rss_url = resolve_source_to_rss(rss_url, source_type)
+    try:
+        feed = await asyncio.to_thread(parse_rss_feed, rss_url)
+        entries = feed.entries[:max(1, min(50, count))]
+        return [
+            RssArticle(
+                title=e.get("title") or "Sans titre",
+                link=getItemLinkOrGuid(e),
+                date=e.get("published") or e.get("updated"),
+            )
+            for e in entries
+        ]
+    except Exception as e:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, f"Erreur parsing RSS: {e}")
+
+# Manual send single article (dashboard)
+@app.post("/api/v1/send-article", response_model=Dict[str, str])
+async def send_article(req: Request, _key=Depends(require_api_key)):
+    body = await req.json()
+    discord_id = body.get("discordTarget")
+    title = body.get("title")
+    link = body.get("link")
+    mode = body.get("mode", "direct")
+    allow_embeds = bool(body.get("allowEmbeds", False))
+    template = body.get("messageTemplate")
+    mention_user_id = body.get("mentionUserId")
+    mention_role_id = body.get("mentionRoleId")
+    embed_config = body.get("embedConfig")
+    if not isValidDiscordId(discord_id):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "ID Discord invalide.")
+    if not title:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Titre est requis.")
+    if link and not isValidUrl(link):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Lien fourni invalide.")
+    try:
+        # Note: send_to_discord signature simplifiée; embed_config/template non utilisés ici
+        await send_to_discord(
+            discord_client=None,
+            target_id=discord_id,
+            content=template.replace("{title}", title).replace("{link}", link) if template else f"{title}\n{link}" if link else title,
+            allow_embeds=allow_embeds,
+            mode=mode
+        )
+        return {"message": "Article envoyé."}
+    except Exception as e:
+        raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Échec de l'envoi à Discord : {e}")
+
+# Batch send from arbitrary source
+@app.post("/api/v1/send-batch", response_model=Dict[str, Any])
+async def send_batch(req: Request, _key=Depends(require_api_key)):
+    body = await req.json()
+    rss_url = body.get("rssUrl")
+    source_type = body.get("sourceType")
+    discord_id = body.get("discordTarget")
+    mode = body.get("mode", "direct")
+    count = int(body.get("count", 5))
+    allow_embeds = bool(body.get("allowEmbeds", False))
+    template = body.get("messageTemplate")
+    mention_user_id = body.get("mentionUserId")
+    mention_role_id = body.get("mentionRoleId")
+    embed_config = body.get("embedConfig")
+    if not isValidDiscordId(discord_id):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "ID Discord invalide.")
+    if not rss_url or not isValidUrl(rss_url):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "URL RSS invalide.")
+    rss_url = resolve_source_to_rss(rss_url, source_type)
+    try:
+        feed = await asyncio.to_thread(parse_rss_feed, rss_url)
+        entries = feed.entries[:max(1, min(50, count))]
+        sent = 0
+        errors: List[str] = []
+        for e in entries:
+            title = e.get("title") or "Sans titre"
+            link = getItemLinkOrGuid(e)
+            try:
+                await send_to_discord(
+                    discord_client=None,
+                    target_id=discord_id,
+                    content=(template or "{title}\n{link}").replace("{title}", title).replace("{link}", link),
+                    allow_embeds=allow_embeds,
+                    mode=mode
+                )
+                sent += 1
+                await asyncio.sleep(0.25)
+            except Exception as se:
+                errors.append(f"Échec: {title} -> {se}")
+        return {"sent": sent, "errors": errors, "requested": count}
+    except Exception as e:
+        raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Échec batch: {e}")
+
+# Force check/send from existing flux
+@app.post("/api/v1/send-from-flux/{flux_id}", response_model=Dict[str, Any])
+async def send_from_flux(flux_id: str, req: Request, _key=Depends(require_api_key)):
+    body = await req.json()
+    count = int(body.get("count", 1))
+    count = max(1, min(50, count))
+
+    coll = get_collection_or_503()
+    if not ObjectId.is_valid(flux_id):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "ID de flux invalide.")
+
+    doc = await coll.find_one({"_id": ObjectId(flux_id)})
+    if not doc:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Flux non trouvé.")
+
+    flux = FluxInDB.model_validate({**{k: v for k, v in doc.items() if k != "_id"}, "id": str(doc["_id"])})
+
+    try:
+        feed = await asyncio.to_thread(parse_rss_feed, flux.rssUrl)
+        entries = feed.entries[:count]
+        sent, errors = 0, []
+        for e in entries:
+            title = e.get("title") or "Sans titre"
+            link = getItemLinkOrGuid(e)
+            # avoid duplicates
+            if flux.lastItem == link:
+                continue
+            try:
+                await send_to_discord(
+                    discord_client=None,
+                    target_id=flux.discordTarget,
+                    content=(flux.messageTemplate or "{title}\n{link}").replace("{title}", title).replace("{link}", link),
+                    allow_embeds=bool(flux.allowEmbeds),
+                    mode=flux.mode
+                )
+                sent += 1
+                await coll.update_one(
+                    {"_id": ObjectId(flux.id)},
+                    {"$set": {"lastItem": link, "lastPubDate": getItemDate(e), "totalSent": (doc.get("totalSent", 0) + 1)}}
+                )
+                await asyncio.sleep(0.25)
+            except Exception as se:
+                errors.append(f"{title}: {se}")
+        return {"sent": sent, "errors": errors, "requested": count, "fluxId": flux_id}
+    except Exception as e:
+        raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Échec envoi manuel: {e}")
+
+# Send by category (optionally force)
+@app.post("/api/v1/send-category", response_model=Dict[str, Any])
+async def send_category(req: Request, _key=Depends(require_api_key)):
+    body = await req.json()
+    category = body.get("category")
+    count = int(body.get("count", 5))
+    force = bool(body.get("force", False))
+
+    if not category:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Catégorie requise.")
+    coll = get_collection_or_503()
+    fluxes = await coll.find({"category": category, "active": True}).to_list(length=None)
+    if not fluxes:
+        return {"sent": 0, "errors": [f"Aucun flux actif trouvé pour la catégorie {category}"], "category": category}
+
+    sent_total, errors = 0, []
+    for doc in fluxes:
+        try:
+            feed = await asyncio.to_thread(parse_rss_feed, doc["rssUrl"])
+            entries = feed.entries[:max(1, min(50, count))]
+            for e in entries:
+                title = e.get("title") or "Sans titre"
+                link = getItemLinkOrGuid(e)
+
+                # dedupe by link/date
+                if not force:
+                    if doc.get("lastItem") == link:
+                        continue
+                    if (getItemDate(e) or 0) <= (doc.get("lastPubDate") or 0):
+                        continue
+
+                await send_to_discord(
+                    discord_client=None,
+                    target_id=doc["discordTarget"],
+                    content=(doc.get("messageTemplate") or "{title}\n{link}").replace("{title}", title).replace("{link}", link),
+                    allow_embeds=doc.get("allowEmbeds", False),
+                    mode=doc.get("mode", "direct")
+                )
+                sent_total += 1
+                await coll.update_one(
+                    {"_id": doc["_id"]},
+                    {"$set": {"lastItem": link, "lastPubDate": getItemDate(e), "totalSent": (doc.get("totalSent", 0) + 1)}}
+                )
+                await asyncio.sleep(0.25)
+        except Exception as e:
+            errors.append(f"{doc.get('name') or doc.get('_id')}: {e}")
+
+    return {"sent": sent_total, "errors": errors, "category": category}
+
+# Schedule category job
+@app.post("/api/v1/schedule-category", response_model=Dict[str, Any])
+async def schedule_category_route(req: Request, _key=Depends(require_api_key)):
+    body = await req.json()
+    category = body.get("category")
+    interval = int(body.get("interval", 600))
+    if not category:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Catégorie requise.")
+    schedule_category(category, interval)
+    return {"message": f"Catégorie {category} planifiée toutes les {interval}s", "jobId": f"cat_{category}"}
+
+# Unschedule category job
+@app.delete("/api/v1/schedule-category/{category}", response_model=Dict[str, Any])
+async def unschedule_category(category: str, _key=Depends(require_api_key)):
+    job_id = f"cat_{category}"
+    try:
+        scheduler.remove_job(job_id)
+        return {"message": f"Catégorie {category} déplanifiée", "jobId": job_id}
+    except Exception:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Job catégorie introuvable.")
+
+# Discord channel info
+@app.get("/api/v1/discord/channel/{channel_id}", response_model=Dict[str, Any])
+async def discord_channel_info(channel_id: str, _key=Depends(require_api_key)):
+    if not isValidDiscordId(channel_id):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "ID Discord invalide.")
+    try:
+        data = await get_channel(None, channel_id)
+        channel_type_map = {0: "texte", 5: "annonce", 15: "forum", 2: "vocal", 4: "catégorie"}
+        type_label = channel_type_map.get(data.get("type"), f"type_{data.get('type')}")
+        return {"id": data.get("id"), "name": data.get("name"), "type": data.get("type"), "typeLabel": type_label}
+    except Exception as e:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail=f"Impossible de récupérer le salon Discord: {e}")
+
+# Discord guild channels (dropdown-friendly: text/announcement/forum)
+@app.get("/api/v1/discord/guild/{guild_id}/channels", response_model=List[Dict[str, Any]])
+async def discord_guild_channels(guild_id: str, _key=Depends(require_api_key)):
+    if not isValidDiscordId(guild_id):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "ID de serveur invalide.")
+    try:
+        data = await get_guild_channels(None, guild_id)
+        channel_type_map = {0: "texte", 5: "annonce", 15: "forum"}
+        out = []
+        for ch in data:
+            if ch.get("type") in (0, 5, 15):
+                out.append({
+                    "id": ch.get("id"),
+                    "name": ch.get("name"),
+                    "type": ch.get("type"),
+                    "typeLabel": channel_type_map.get(ch.get("type"), f"type_{ch.get('type')}")
+                })
+        return out
+    except Exception as e:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail=f"Impossible de lister les salons: {e}")
+
+# Actions en lot sur les flux
+@app.post("/api/v1/bulk-actions", response_model=Dict[str, Any])
+async def bulk_actions(req: Request, _key=Depends(require_api_key)):
+    """
+    Effectue des actions en lot sur plusieurs flux.
+    Actions supportées: activate, deactivate, delete, change_category, change_interval
+    """
+    body = await req.json()
+    action = body.get("action")
+    flux_ids = body.get("fluxIds", [])
+    params = body.get("params", {})
+    
+    if not action or not flux_ids:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Action et liste de flux requis.")
+    
+    coll = get_collection_or_503()
+    results = {"success": 0, "errors": []}
+    
+    for flux_id in flux_ids:
+        try:
+            if not ObjectId.is_valid(flux_id):
+                results["errors"].append(f"{flux_id}: ID invalide")
+                continue
+                
+            if action == "activate":
+                await coll.update_one({"_id": ObjectId(flux_id)}, {"$set": {"active": True}})
+            elif action == "deactivate":
+                await coll.update_one({"_id": ObjectId(flux_id)}, {"$set": {"active": False}})
+            elif action == "delete":
+                result = await coll.delete_one({"_id": ObjectId(flux_id)})
+                if result.deleted_count == 0:
+                    results["errors"].append(f"{flux_id}: Non trouvé")
+                    continue
+                try:
+                    scheduler.remove_job(flux_id)
+                except Exception:
+                    pass
+            elif action == "change_category":
+                new_category = params.get("category", "general")
+                await coll.update_one({"_id": ObjectId(flux_id)}, {"$set": {"category": new_category}})
+            elif action == "change_interval":
+                new_interval = max(60, int(params.get("interval", 300)))
+                await coll.update_one({"_id": ObjectId(flux_id)}, {"$set": {"interval": new_interval}})
+            else:
+                results["errors"].append(f"{flux_id}: Action inconnue '{action}'")
+                continue
+                
+            results["success"] += 1
+            
+        except Exception as e:
+            results["errors"].append(f"{flux_id}: {str(e)}")
+    
+    # Recharger les flux après les modifications
+    try:
+        await load_and_schedule_fluxes()
+    except Exception:
+        pass
+        
+    return {
+        "message": f"Action '{action}' effectuée",
+        "processed": len(flux_ids),
+        "success": results["success"],
+        "errors": results["errors"]
+    }
+
+# Statistiques avancées par catégorie
+@app.get("/api/v1/stats/categories", response_model=Dict[str, Any])
+async def get_category_stats(_key=Depends(require_api_key)):
+    """Statistiques détaillées par catégorie."""
+    coll = get_collection_or_503()
+    
+    pipeline = [
+        {
+            "$group": {
+                "_id": {"$ifNull": ["$category", "general"]},
+                "total": {"$sum": 1},
+                "active": {"$sum": {"$cond": [{"$eq": ["$active", True]}, 1, 0]}},
+                "errors": {"$sum": {"$cond": [{"$ne": ["$lastError", None]}, 1, 0]}},
+                "totalSent": {"$sum": {"$ifNull": ["$totalSent", 0]}}
+            }
+        },
+        {"$sort": {"_id": 1}}
+    ]
+    
+    result = await coll.aggregate(pipeline).to_list(length=None)
+    
+    categories = {}
+    for doc in result:
+        cat = doc["_id"]
+        categories[cat] = {
+            "total": doc["total"],
+            "active": doc["active"],
+            "inactive": doc["total"] - doc["active"],
+            "errors": doc["errors"],
+            "totalSent": doc["totalSent"],
+            "health": "healthy" if doc["errors"] == 0 and doc["active"] > 0 else "issues"
+        }
+    
+    return {"categories": categories}
+
+# Recherche avancée de flux
+@app.post("/api/v1/search-fluxes", response_model=List[FluxInDB])
+async def search_fluxes(req: Request, _key=Depends(require_api_key)):
+    """
+    Recherche avancée de flux avec filtres multiples.
+    """
+    body = await req.json()
+    coll = get_collection_or_503()
+    
+    # Construction de la requête MongoDB
+    query = {}
+    
+    # Filtre par catégorie
+    if body.get("category"):
+        query["category"] = body["category"]
+    
+    # Filtre par statut actif
+    if "active" in body:
+        query["active"] = body["active"]
+    
+    # Filtre par présence d'erreurs
+    if "hasErrors" in body:
+        if body["hasErrors"]:
+            query["lastError"] = {"$ne": None}
+        else:
+            query["lastError"] = None
+    
+    # Recherche textuelle
+    if body.get("search"):
+        search_term = body["search"]
+        query["$or"] = [
+            {"name": {"$regex": search_term, "$options": "i"}},
+            {"rssUrl": {"$regex": search_term, "$options": "i"}},
+            {"discordTarget": {"$regex": search_term, "$options": "i"}}
+        ]
+    
+    # Filtre par type de source
+    if body.get("sourceType"):
+        query["sourceType"] = body["sourceType"]
+    
+    # Filtre par intervalle
+    if body.get("minInterval"):
+        query["interval"] = {"$gte": body["minInterval"]}
+    if body.get("maxInterval"):
+        if "interval" not in query:
+            query["interval"] = {}
+        query["interval"]["$lte"] = body["maxInterval"]
+    
+    # Limiter le nombre de résultats
+    limit = min(100, body.get("limit", 50))
+    
+    docs = await coll.find(query).limit(limit).to_list(length=None)
+    
+    cleaned = []
+    for doc in docs:
+        oid = doc.get("_id")
+        doc_copy = {k: v for k, v in doc.items() if k != "_id"}
+        if oid is not None:
+            doc_copy["id"] = str(oid)
+        cleaned.append(doc_copy)
+    
+    return [FluxInDB.model_validate(doc) for doc in cleaned]
+
+# Diagnostic des flux en erreur
+@app.get("/api/v1/diagnostics/errors", response_model=Dict[str, Any])
+async def get_error_diagnostics(_key=Depends(require_api_key)):
+    """Diagnostic détaillé des flux en erreur."""
+    coll = get_collection_or_503()
+    
+    # Flux avec erreurs
+    error_fluxes = await coll.find({"lastError": {"$ne": None}}).to_list(length=None)
+    
+    # Grouper par type d'erreur
+    error_types = {}
+    for flux in error_fluxes:
+        error = flux.get("lastError", "")
+        # Extraire le type d'erreur général
+        if "Discord" in error:
+            error_type = "Discord"
+        elif "RSS" in error or "parsing" in error.lower():
+            error_type = "RSS/Parsing"
+        elif "timeout" in error.lower():
+            error_type = "Timeout"
+        elif "HTTP" in error:
+            error_type = "HTTP"
+        else:
+            error_type = "Autre"
+            
+        if error_type not in error_types:
+            error_types[error_type] = []
+        
+        error_types[error_type].append({
+            "id": str(flux["_id"]),
+            "name": flux.get("name"),
+            "category": flux.get("category"),
+            "error": error,
+            "lastCheck": flux.get("lastCheck")
+        })
+    
+    return {
+        "totalErrors": len(error_fluxes),
+        "errorTypes": error_types,
+        "summary": {error_type: len(fluxes) for error_type, fluxes in error_types.items()}
+    }
+
+# Nouvelles routes pour les fonctionnalités RSSDI v3.6.0
+
+# Test de connexion Discord
+@app.get("/api/v1/discord/test", response_model=Dict[str, Any])
+async def test_discord_connection_route(_key=Depends(require_api_key)):
+    """Test la connexion Discord et retourne le statut."""
+    try:
+        return await test_discord_connection()
+    except Exception as e:
+        return {
+            "status": "error",
+            "message": f"Erreur test Discord: {str(e)}",
+            "details": "Vérifiez votre token et les permissions du bot"
+        }
+
+# Redémarrage du client Discord
+@app.post("/api/v1/bot/restart-discord", response_model=Dict[str, str])
+async def restart_discord_client_route(_key=Depends(require_api_key)):
+    """Redémarre le client Discord."""
+    try:
+        result = await restart_discord_client()
+        return {"message": result.get("message", "Redémarrage terminé")}
+    except Exception as e:
+        return {"message": f"Erreur redémarrage Discord: {str(e)}"}
+
+# Statut général du système
+@app.get("/api/v1/bot/status", response_model=Dict[str, Any])
+async def get_bot_status(_key=Depends(require_api_key)):
+    """Retourne le statut général du bot et des services."""
+    try:
+        coll = get_collection_or_503()
+        
+        # Statistiques de base
+        total_fluxes = await coll.count_documents({})
+        active_fluxes = await coll.count_documents({"active": True})
+        error_fluxes = await coll.count_documents({"lastError": {"$ne": None}})
+        
+        # Statut Discord
+        discord_status = "disconnected"
+        if is_discord_ready():
+            discord_status = "connected"
+        elif DISCORD_TOKEN:
+            discord_status = "configured"
+        else:
+            discord_status = "not_configured"
+        
+        return {
+            "discord": {
+                "status": discord_status,
+                "hasToken": bool(DISCORD_TOKEN)
+            },
+            "database": {
+                "status": "connected" if coll else "disconnected",
+                "totalFluxes": total_fluxes,
+                "activeFluxes": active_fluxes,
+                "errorFluxes": error_fluxes
+            },
+            "scheduler": {
+                "status": "running" if scheduler.running else "stopped",
+                "jobCount": len(scheduler.get_jobs()),
+                "aggressiveMode": aggressive_mode
+            }
+        }
+        
+    except Exception as e:
+        return {
+            "error": f"Erreur récupération statut: {str(e)}",
+            "discord": {"status": "unknown"},
+            "database": {"status": "error"},
+            "scheduler": {"status": "unknown"}
+        }
+
+def _get_system_resources() -> Dict[str, Any]:
+    """
+    Récupère les informations sur les ressources système.
+    Gère gracieusement l'absence du module psutil.
+    """
+    if psutil is None:
+        return {
+            "status": "unavailable",
+            "message": "Module psutil non installé - informations limitées"
+        }
+    
+    try:
+        return {
+            "cpu_percent": psutil.cpu_percent(interval=1),
+            "memory": {
+                "total": psutil.virtual_memory().total,
+                "available": psutil.virtual_memory().available,
+                "percent": psutil.virtual_memory().percent
+            },
+            "disk": {
+                "total": psutil.disk_usage(os.getcwd()).total,
+                "free": psutil.disk_usage(os.getcwd()).free,
+                "percent": psutil.disk_usage(os.getcwd()).percent
+            }
+        }
+    except Exception as e:
+        return {
+            "status": "error",
+            "message": f"Erreur lors de la récupération des ressources : {str(e)}"
+        }
+
+# Informations système
+@app.get("/api/v1/system/info", response_model=Dict[str, Any])
+async def get_system_info(_key=Depends(require_api_key)):
+    """Retourne les informations système."""
+    try:
+        return {
+            "system": {
+                "platform": platform.system(),
+                "version": platform.version(),
+                "architecture": platform.architecture()[0]
+            },
+            "python": {
+                "version": sys.version,
+                "executable": sys.executable
+            },
+            "resources": _get_system_resources(),
+            "application": {
+                "name": "RSSDI",
+                "version": "3.6.0",
+                "port": PORT
+            }
+        }
+        
+    except ImportError as e:
+        return {
+            "error": f"Module manquant ({str(e)}) - informations système limitées",
+            "application": {
+                "name": "RSSDI",
+                "version": "3.6.0",
+                "port": PORT
+            }
+        }
+    except Exception as e:
+        return {"error": f"Erreur système: {str(e)}"}
+
+# Export des flux au format JSON
+@app.get("/api/v1/export/fluxes")
+async def export_fluxes(_key=Depends(require_api_key)):
+    """Exporte tous les flux au format JSON."""
+    try:
+        coll = get_collection_or_503()
+        docs = await coll.find({}).to_list(length=None)
+        
+        # Nettoyer les ObjectId MongoDB
+        export_data = []
+        for doc in docs:
+            clean_doc = {k: v for k, v in doc.items() if k != "_id"}
+            clean_doc["id"] = str(doc["_id"])
+            export_data.append(clean_doc)
+        
+        from fastapi.responses import JSONResponse
+        import json
+        from datetime import datetime
+        
+        response_data = {
+            "export_date": datetime.now().isoformat(),
+            "version": "3.6.0",
+            "total_fluxes": len(export_data),
+            "fluxes": export_data
+        }
+        
+        return JSONResponse(
+            content=response_data,
+            headers={
+                "Content-Disposition": f"attachment; filename=rssdi_export_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+            }
+        )
+        
+    except Exception as e:
+        raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Erreur export: {str(e)}")
+
+# Import des flux depuis un fichier JSON
+@app.post("/api/v1/import/fluxes", response_model=Dict[str, Any])
+async def import_fluxes(req: Request, _key=Depends(require_api_key)):
+    """Importe des flux depuis un fichier JSON."""
+    try:
+        body = await req.json()
+        import_data = body.get("data")
+        overwrite = body.get("overwrite", False)
+        
+        if not import_data or not isinstance(import_data, dict):
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, "Données d'import invalides")
+        
+        fluxes_to_import = import_data.get("fluxes", [])
+        if not fluxes_to_import:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, "Aucun flux à importer")
+        
+        coll = get_collection_or_503()
+        imported = 0
+        errors = []
+        
+        for flux_data in fluxes_to_import:
+            try:
+                # Supprimer l'ID pour éviter les conflits
+                flux_data.pop("id", None)
+                flux_data.pop("_id", None)
+                
+                # Vérifier si le flux existe déjà (par URL et target)
+                existing = await coll.find_one({
+                    "rssUrl": flux_data.get("rssUrl"),
+                    "discordTarget": flux_data.get("discordTarget")
+                })
+                
+                if existing and not overwrite:
+                    continue  # Skip si existe déjà et pas d'écrasement
+                elif existing and overwrite:
+                    # Mettre à jour le flux existant
+                    await coll.update_one(
+                        {"_id": existing["_id"]},
+                        {"$set": flux_data}
+                    )
+                else:
+                    # Créer nouveau flux
+                    await coll.insert_one(flux_data)
+                
+                imported += 1
+                
+            except Exception as e:
+                errors.append(f"Erreur flux {flux_data.get('name', 'inconnu')}: {str(e)}")
+        
+        # Recharger les flux
+        try:
+            await load_and_schedule_fluxes()
+        except:
+            pass
+        
+        return {
+            "message": f"Import terminé: {imported} flux importés",
+            "imported": imported,
+            "total": len(fluxes_to_import),
+            "errors": errors
+        }
+        
+    except Exception as e:
+        raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Erreur import: {str(e)}")
+
+# Uvicorn entrypoint (local/dev)
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run("main:app", host="0.0.0.0", port=int(PORT), reload=True)

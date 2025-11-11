@@ -1,0 +1,66 @@
+# Docker Compose moderne pour RSSDI v3.6.0
+version: "3.9"
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: momoxrss_app
+    restart: unless-stopped
+    ports:
+      - "${PORT:-3000}:3000"
+    volumes:
+      # Monte le répertoire de données en volume persistant
+      - ./data:/app/data
+      - ./static:/app/static
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    env_file: .env
+    networks:
+      - rssdi-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/api/v1/stats"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    
+  mongodb:
+    # Version LTS stable recommandée (évite les problèmes de résolution DNS)
+    image: mongo:7.0-jammy
+    container_name: mongodb
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    volumes:
+      # Volume nommé pour une meilleure gestion
+      - mongodb_data:/data/db
+      - ./mongodb_data:/data/db/backup
+    environment:
+      # Configuration MongoDB sécurisée
+      - MONGO_INITDB_ROOT_USERNAME=${MONGO_ROOT_USER:-admin}
+      - MONGO_INITDB_ROOT_PASSWORD=${MONGO_ROOT_PASSWORD:-changeme}
+      - MONGO_INITDB_DATABASE=${MONGO_DB:-momoxrss}
+    networks:
+      - rssdi-network
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    command: ["mongod", "--bind_ip_all", "--quiet"]
+
+# Réseau dédié pour isoler les services
+networks:
+  rssdi-network:
+    driver: bridge
+    name: rssdi-network
+
+# Volumes nommés pour une meilleure persistence
+volumes:
+  mongodb_data:
+    driver: local
+    name: rssdi_mongodb_data

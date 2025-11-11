@@ -1,0 +1,1618 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>RSSDI Dashboard</title>
+  <style>
+    :root {
+      --bg: #0e1326;
+      --card: #0b1022;
+      --muted: #9aa1ac;
+      --text: #e7ebf0;
+      --border: #1b223a;
+      --accent: #3b82f6;
+      --danger: #ef4444;
+      --green: #10b981;
+      --gray: #374151;
+      --warning: #f59e0b;
+      --card-hover: #141c3a;
+    }
+    
+    * { box-sizing: border-box; }
+    
+    body {
+      margin: 0;
+      background: linear-gradient(180deg, var(--bg), #0b1022 40%);
+      color: var(--text);
+      font-family: 'Inter', system-ui, -apple-system, sans-serif;
+      min-height: 100vh;
+    }
+    
+    .container {
+      max-width: 1350px;
+      margin: 0 auto;
+      padding: 22px;
+    }
+    
+    header {
+      position: sticky;
+      top: 0;
+      background: rgba(14,19,38,0.85);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border);
+      margin-bottom: 16px;
+      padding: 12px 0;
+      z-index: 50;
+      box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+    }
+
+    /* Section d'erreurs améliorée */
+    .error-section {
+      position: fixed;
+      bottom: 20px;
+      right: 20px;
+      width: 450px;
+      max-height: 500px;
+      overflow-y: auto;
+      background: rgba(14,19,38,0.95);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 16px;
+      z-index: 1000;
+      backdrop-filter: blur(12px);
+      box-shadow: 0 8px 32px rgba(0,0,0,0.35);
+      transition: all 0.3s ease;
+    }
+    
+    .error-section.collapsed {
+      height: 60px;
+      overflow: hidden;
+    }
+    
+    .error-section h3 {
+      margin: 0 0 12px 0;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      cursor: pointer;
+    }
+    
+    .error-summary {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 12px;
+      font-size: 0.85rem;
+    }
+    
+    .error-type-badge {
+      padding: 4px 8px;
+      border-radius: 12px;
+      background: rgba(220,38,38,0.2);
+      border: 1px solid rgba(220,38,38,0.3);
+      font-size: 0.75rem;
+    }
+    
+    .error-list {
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+    
+    .error-item {
+      padding: 10px;
+      border-radius: 8px;
+      background: rgba(220,38,38,0.1);
+      border: 1px solid rgba(220,38,38,0.2);
+      margin-bottom: 8px;
+      font-size: 0.9rem;
+      position: relative;
+    }
+    
+    .error-item:hover {
+      background: rgba(220,38,38,0.15);
+    }
+    
+    .error-title {
+      font-weight: 600;
+      color: #fecaca;
+      margin-bottom: 4px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    
+    .error-message {
+      color: var(--muted);
+      font-size: 0.8rem;
+      word-break: break-word;
+    }
+    
+    .error-actions {
+      margin-top: 8px;
+      display: flex;
+      gap: 6px;
+    }
+    
+    .bulk-actions {
+      position: sticky;
+      top: 0;
+      background: var(--card);
+      padding: 12px;
+      border-radius: 8px;
+      margin-bottom: 16px;
+      border: 1px solid var(--border);
+    }
+    
+    .bulk-actions h4 {
+      margin: 0 0 8px 0;
+      font-size: 0.9rem;
+    }
+    
+    .bulk-actions-row {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+    
+    .checkbox-group {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      margin-right: 12px;
+    }
+    
+    .category-stats {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 10px;
+      margin-bottom: 16px;
+    }
+    
+    .category-card {
+      background: linear-gradient(135deg, var(--card), #0a1018);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 12px;
+    }
+    
+    .category-name {
+      font-weight: 600;
+      margin-bottom: 8px;
+      text-transform: capitalize;
+    }
+    
+    .category-metrics {
+      display: flex;
+      justify-content: space-between;
+      font-size: 0.85rem;
+    }
+    
+    .advanced-search {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 16px;
+      margin-bottom: 16px;
+    }
+    
+    .search-collapsed {
+      max-height: 60px;
+      overflow: hidden;
+    }
+    
+    .btn-small {
+      padding: 4px 8px;
+      font-size: 0.75rem;
+      border-radius: 6px;
+    }
+    .header-inner { display:flex; align-items:center; justify-content:space-between; }
+    h1 { margin:0; font-size:1.45rem; letter-spacing: 0.2px; }
+    .card { background: linear-gradient(180deg, #11162b, var(--card)); border:1px solid var(--border); border-radius:14px; padding:16px; box-shadow: 0 12px 28px rgba(0,0,0,0.25); }
+    .grid-2 { display:grid; grid-template-columns: 1fr 1fr; gap:12px; }
+    .grid-3 { display:grid; grid-template-columns: repeat(3, 1fr); gap:12px; }
+    label { display:block; margin:10px 0 6px; color: var(--muted); font-weight:600; font-size:0.92rem; }
+    input, select, textarea { width:100%; background:#0a1122; color:var(--text); border:1px solid var(--border); border-radius:10px; padding:10px 12px; outline:none; }
+    button { background: var(--accent); color:#fff; border:none; border-radius:10px; padding:10px 14px; cursor:pointer; font-weight:600; }
+    button:hover { filter: brightness(1.07); }
+    .btn-secondary { background: var(--gray); }
+    .btn-danger { background: var(--danger); }
+    .btn-green { background: var(--green); }
+    .pill { display:inline-block; padding:4px 8px; border-radius:18px; font-size:0.78rem; border:1px solid var(--border); background: #0a1122; color:#cdd6e4; }
+    .badge { display:inline-block; padding:4px 10px; border-radius:999px; font-weight:700; font-size:0.78rem; }
+    .badge-ok { background: rgba(22,163,74,0.18); color:#bbf7d0; border:1px solid rgba(22,163,74,0.45); }
+    .badge-warn { background: rgba(245,158,11,0.18); color:#fde68a; border:1px solid rgba(245,158,11,0.45); }
+    .badge-err { background: rgba(220,38,38,0.18); color:#fecaca; border:1px solid rgba(220,38,38,0.45); }
+    .message-container { position: fixed; top: 20px; right: 20px; z-index: 1000; }
+    .message-box { background: #0b1220; border:1px solid var(--border); color:#fff; padding: 12px 14px; border-radius:12px; box-shadow:0 8px 20px rgba(0,0,0,0.35); opacity:0; transform: translateY(-6px); transition: all 0.4s ease; }
+    .message-box.show { opacity:1; transform: translateY(0); }
+    .modal-backdrop { position:fixed; inset:0; background:rgba(0,0,0,0.45); display:flex; align-items:center; justify-content:center; z-index:2000; }
+    .modal { background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 16px; max-width: 900px; width: 94%; max-height: 92vh; overflow: auto; }
+    @media (max-width: 860px) { .grid-3 { grid-template-columns: 1fr; } .grid-2 { grid-template-columns: 1fr; } }
+    .row { display:flex; gap:8px; align-items:center; }
+    .table { width:100%; border-collapse: collapse; margin-top:10px; }
+    .table th, .table td { border-bottom:1px solid var(--border); padding:8px; text-align:left; vertical-align:top; }
+    .small { font-size:0.86rem; color:#cdd6e4; }
+    .muted { color: var(--muted); }
+    .flex { display:flex; gap:10px; align-items:center; }
+    .divider { height:1px; background:#1f2937; margin:12px 0; }
+    .tabs { display:flex; gap:8px; margin-bottom:10px; }
+    .tab-btn { flex:1; padding:8px; border:none; border-radius:8px; cursor:pointer; background:#1f2937; color:#fff; }
+    .tab-btn.active { background: var(--accent); }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <div class="header-inner">
+        <h1>RSSDI Dashboard</h1>
+        <div class="flex">
+          <span class="pill" id="schedulerPill">Scheduler: ...</span>
+          <span class="pill" id="totalSentPill">Envoyés: ...</span>
+          <button id="toggleAggressiveBtn" class="btn-green">Activer mode 10s</button>
+        </div>
+      </div>
+    </header>
+
+    <div class="grid-3">
+      <div class="card stats-card">
+        <div class="muted">Tâches actives</div>
+        <div id="jobCount" class="stats-number">...</div>
+      </div>
+      <div class="card stats-card">
+        <div class="muted">Flux actifs</div>
+        <div id="activeFluxCount" class="stats-number">...</div>
+      </div>
+      <div class="card stats-card">
+        <div class="muted">Total flux</div>
+        <div id="totalFluxCount" class="stats-number">...</div>
+      </div>
+    </div>
+
+    <!-- Statistiques par catégorie -->
+    <div class="card" style="margin-top:12px;">
+      <h3>Statistiques par catégorie</h3>
+      <div id="categoryStats" class="category-stats"></div>
+    </div>
+
+    <!-- Section d'erreurs améliorée -->
+    <div id="errorSection" class="error-section" style="display: none;">
+      <h3 onclick="toggleErrorSection()">
+        <span>Erreurs détectées (<span id="errorCount">0</span>)</span>
+        <div>
+          <button class="btn-small btn-secondary" onclick="toggleErrorSection()">Réduire</button>
+          <button class="btn-small btn-secondary" onclick="document.getElementById('errorSection').style.display='none'">×</button>
+        </div>
+      </h3>
+      <div id="errorContent">
+        <div id="errorSummary" class="error-summary"></div>
+        <div class="error-actions">
+          <button class="btn-small btn-danger" onclick="bulkFixErrors()">Corriger les erreurs</button>
+          <button class="btn-small btn-secondary" onclick="refreshErrorDiagnostics()">Actualiser</button>
+        </div>
+        <div id="errorList" class="error-list"></div>
+      </div>
+    </div>
+
+    <div class="message-container"></div>
+    <div class="grid-2" style="margin-top:12px;">
+      <div class="card">
+        <h3>Ajouter un flux</h3>
+        <form id="addFluxForm">
+          <div class="grid-2">
+            <div>
+              <label>Nom</label>
+              <input type="text" name="name" placeholder="Nom (optionnel)"/>
+            </div>
+            <div>
+              <label>Catégorie</label>
+              <select name="category" id="addCategorySelect">
+                <option value="general">general</option>
+                <option value="news">news</option>
+                <option value="sports">sports</option>
+                <option value="tech">tech</option>
+                <option value="finance">finance</option>
+                <option value="gaming">gaming</option>
+                <option value="music">music</option>
+                <option value="errors">errors</option>
+                <option value="custom">🖊️ Personnalisé...</option>
+              </select>
+              <input type="text" name="customCategory" id="addCustomCategory" placeholder="Nom de catégorie personnalisé" style="display:none; margin-top:5px;">
+            </div>
+          </div>
+          <div class="grid-2">
+            <div>
+              <label>Type de source</label>
+              <select name="sourceType" id="addSourceType">
+                <option value="web">Web (RSS)</option>
+                <option value="youtube">YouTube</option>
+                <option value="facebook">Facebook</option>
+                <option value="instagram">Instagram</option>
+                <option value="tiktok">TikTok</option>
+              </select>
+            </div>
+            <div>
+              <label>Mode de publication</label>
+              <select name="mode" id="addMode">
+                <option value="direct">Direct</option>
+                <option value="thread">Thread</option>
+              </select>
+            </div>
+          </div>
+          <label>URL RSS ou source</label>
+          <input type="text" name="rssUrl" id="addRssUrl" required placeholder="https://..."/>
+          <div class="grid-2">
+            <div>
+              <label>Salon Discord</label>
+              <div class="flex">
+                <input type="text" id="guildIdAdd" placeholder="ID serveur"/>
+                <button type="button" class="btn-secondary" id="loadGuildChannelsAddBtn">Lister</button>
+              </div>
+              <select id="addDiscordDropdown"></select>
+              <input type="text" name="discordTarget" id="addDiscordTarget" required placeholder="ID salon (si saisie manuelle)"/>
+            </div>
+            <div>
+              <label>Intervalle (s, min 60)</label>
+              <input type="number" name="interval" id="addInterval" value="300" min="60" required/>
+            </div>
+          </div>
+          <div class="grid-2">
+            <div>
+              <label>Actif</label>
+              <select name="active" id="addActive">
+                <option value="true">Oui</option>
+                <option value="false">Non</option>
+              </select>
+            </div>
+            <div>
+              <label>Embeds</label>
+              <select name="allowEmbeds">
+                <option value="false">Non</option>
+                <option value="true">Oui</option>
+              </select>
+            </div>
+          </div>
+          <div class="grid-2">
+            <div>
+              <label>Mots-clés inclus</label>
+              <input type="text" name="includeKeywords" placeholder="sport, foot"/>
+            </div>
+            <div>
+              <label>Mots-clés exclus</label>
+              <input type="text" name="excludeKeywords" placeholder="rumeur, sponsor"/>
+            </div>
+          </div>
+          <div class="grid-2">
+            <div>
+              <label>Regex inclus</label>
+              <input type="text" name="regexInclude" placeholder="^\\b(foot|rugby)\\b"/>
+            </div>
+            <div>
+              <label>Regex exclus</label>
+              <input type="text" name="regexExclude" placeholder="rumeur|sponsor"/>
+            </div>
+          </div>
+          <div class="grid-2">
+            <div>
+              <label>Domaines autorisés</label>
+              <input type="text" name="domainWhitelist" placeholder="nytimes.com, lemonde.fr"/>
+            </div>
+            <div>
+              <label>Domaines interdits</label>
+              <input type="text" name="domainBlacklist" placeholder="example.com"/>
+            </div>
+          </div>
+          <div class="grid-2">
+            <div>
+              <label>Langue (fr/en)</label>
+              <input type="text" name="language" placeholder="fr"/>
+            </div>
+            <div>
+              <label>Fenêtre de déduplication (heures)</label>
+              <input type="number" name="dedupeWindowHours" value="24" min="0"/>
+            </div>
+          </div>
+          <div class="grid-2">
+            <div>
+              <label>Max par exécution</label>
+              <input type="number" name="maxPerRun" value="5" min="1" max="50"/>
+            </div>
+            <div>
+              <label>Heures calmes début/fin</label>
+              <div class="flex">
+                <input type="text" name="quietHoursStart" placeholder="23:00"/>
+                <input type="text" name="quietHoursEnd" placeholder="07:00"/>
+              </div>
+            </div>
+          </div>
+          <div class="grid-2">
+            <div>
+              <label>Plafond quotidien</label>
+              <input type="number" name="dailyCap" placeholder="50"/>
+            </div>
+            <div>
+              <label>Template de message</label>
+              <input type="text" name="messageTemplate" placeholder="{title}\n{link}"/>
+            </div>
+          </div>
+          <div class="grid-2">
+            <div>
+              <label>Mention utilisateur ID</label>
+              <input type="text" name="mentionUserId" placeholder="123456789012345678"/>
+            </div>
+            <div>
+              <label>Mention rôle ID</label>
+              <input type="text" name="mentionRoleId" placeholder="123456789012345678"/>
+            </div>
+          </div>
+          <div class="flex" style="margin-top:10px;">
+            <button type="submit">Ajouter et planifier</button>
+            <button type="button" class="btn-secondary" onclick="document.getElementById('addFluxForm').reset()">Effacer</button>
+          </div>
+        </form>
+      </div>
+
+      <div class="card">
+        <h3>Outils Discord</h3>
+        
+        <!-- Diagnostic Discord -->
+        <div class="grid-2">
+          <div>
+            <h4>Statut du Bot</h4>
+            <div id="discordStatus" class="small" style="margin-bottom:10px;">Chargement...</div>
+            <button id="testDiscordBtn" class="btn-secondary">Tester connexion</button>
+            <button id="restartDiscordBtn" class="btn-secondary">Redémarrer bot</button>
+          </div>
+          <div>
+            <h4>Salons Discord</h4>
+            <label>ID serveur (guild)</label>
+            <input type="text" id="guildIdInput" placeholder="Ex: 123456789012345678"/>
+            <div class="flex" style="margin-top:5px;">
+              <button id="loadGuildChannelsBtn" class="btn-green">Lister les salons</button>
+              <button id="clearGuildChannelsBtn" class="btn-secondary">Nettoyer</button>
+            </div>
+            <select id="guildChannelsDropdown" style="margin-top:5px;"></select>
+          </div>
+        </div>
+
+        <div class="divider"></div>
+
+        <h4>Tester une source RSS</h4>
+        <form id="testRssForm">
+          <div class="grid-2">
+            <select id="testSourceType">
+              <option value="web">Web</option>
+              <option value="youtube">YouTube</option>
+              <option value="facebook">Facebook</option>
+              <option value="instagram">Instagram</option>
+              <option value="tiktok">TikTok</option>
+            </select>
+            <input type="text" id="testRssUrl" placeholder="URL RSS ou URL source" required/>
+          </div>
+          <button type="submit">Tester et afficher 5 articles</button>
+        </form>
+        <div id="testResult" class="small" style="margin-top:8px;"></div>
+
+        <div class="divider"></div>
+
+        <h4>Import/Export</h4>
+        <div class="grid-2">
+          <div>
+            <button id="exportFluxesBtn" class="btn-secondary">Exporter flux</button>
+            <input type="file" id="importFile" accept=".json" style="display:none;">
+            <button id="importFluxesBtn" class="btn-secondary">Importer flux</button>
+          </div>
+          <div>
+            <button id="systemInfoBtn" class="btn-secondary">Infos système</button>
+            <div id="systemInfo" class="small" style="margin-top:8px;"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <!-- Actions en lot -->
+    <div class="card" style="margin-top:12px;">
+      <h3>Actions en lot</h3>
+      <div class="bulk-actions">
+        <h4>Sélectionner et modifier plusieurs flux</h4>
+        <div class="bulk-actions-row">
+          <div class="checkbox-group">
+            <input type="checkbox" id="selectAll" onchange="toggleSelectAll()">
+            <label for="selectAll">Tout sélectionner</label>
+          </div>
+          <select id="bulkAction">
+            <option value="">Choisir une action</option>
+            <option value="activate">Activer</option>
+            <option value="deactivate">Désactiver</option>
+            <option value="change_category">Changer catégorie</option>
+            <option value="change_interval">Changer intervalle</option>
+            <option value="delete">Supprimer</option>
+          </select>
+          <input type="text" id="bulkParams" placeholder="Paramètres (ex: general, 600)" style="width:150px;">
+          <button class="btn-secondary" onclick="executeBulkAction()">Exécuter</button>
+          <span id="selectedCount" class="muted">0 sélectionné(s)</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Recherche avancée -->
+    <div class="card advanced-search" style="margin-top:12px;">
+      <h3 onclick="toggleAdvancedSearch()" style="cursor:pointer;">
+        Recherche avancée
+        <span id="searchToggle">▼</span>
+      </h3>
+      <div id="advancedSearchContent">
+        <form id="advancedSearchForm">
+          <div class="grid-3">
+            <div>
+              <label>Catégorie</label>
+              <select name="category" id="advSearchCategory">
+                <option value="">Toutes</option>
+              </select>
+            </div>
+            <div>
+              <label>Type de source</label>
+              <select name="sourceType">
+                <option value="">Tous</option>
+                <option value="web">Web</option>
+                <option value="youtube">YouTube</option>
+                <option value="facebook">Facebook</option>
+                <option value="instagram">Instagram</option>
+                <option value="tiktok">TikTok</option>
+              </select>
+            </div>
+            <div>
+              <label>Statut</label>
+              <select name="active">
+                <option value="">Tous</option>
+                <option value="true">Actifs</option>
+                <option value="false">Inactifs</option>
+              </select>
+            </div>
+          </div>
+          <div class="grid-2">
+            <div>
+              <label>Recherche textuelle</label>
+              <input type="text" name="search" placeholder="Nom, URL, salon Discord...">
+            </div>
+            <div>
+              <label>Avec erreurs</label>
+              <select name="hasErrors">
+                <option value="">Tous</option>
+                <option value="true">Avec erreurs</option>
+                <option value="false">Sans erreurs</option>
+              </select>
+            </div>
+          </div>
+          <div class="grid-2">
+            <div>
+              <label>Intervalle min (secondes)</label>
+              <input type="number" name="minInterval" min="60">
+            </div>
+            <div>
+              <label>Intervalle max (secondes)</label>
+              <input type="number" name="maxInterval">
+            </div>
+          </div>
+          <div class="flex" style="margin-top:10px;">
+            <button type="submit">Rechercher</button>
+            <button type="button" class="btn-secondary" onclick="resetAdvancedSearch()">Réinitialiser</button>
+            <button type="button" class="btn-secondary" onclick="toggleAdvancedSearch()">Fermer</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <div class="card" style="margin-top:12px;">
+      <div class="flex" style="justify-content:space-between; align-items:center;">
+        <h3>Flux par salon / thread</h3>
+        <div class="flex">
+          <label class="muted">Vue rapide</label>
+          <select id="quickView">
+            <option value="">Toutes</option>
+            <option value="errors">Erreurs</option>
+            <option value="inactive">Inactifs</option>
+            <option value="healthy">OK</option>
+          </select>
+        </div>
+      </div>
+      <div class="grid-2">
+        <div>
+          <label>Filtrer par catégorie</label>
+          <select id="filterCategory"></select>
+        </div>
+        <div>
+          <label>Recherche</label>
+          <input type="text" id="searchInput" placeholder="Tapez pour filtrer..."/>
+        </div>
+      </div>
+      <div id="fluxGroups" style="margin-top:8px;"></div>
+    </div>
+  </div>
+
+  <script>
+    // API Key - À configurer via variable d'environnement ou prompt utilisateur
+    // Ne JAMAIS hardcoder la clé API dans le code source
+    let API_KEY = localStorage.getItem('momoxrss_api_key');
+
+    if (!API_KEY) {
+      API_KEY = prompt('Veuillez entrer votre clé API:');
+      if (API_KEY) {
+        localStorage.setItem('momoxrss_api_key', API_KEY);
+      } else {
+        alert('Clé API requise pour utiliser le dashboard');
+      }
+    }
+
+    const API_PORT = 3000;
+    const BASE_URL = `${window.location.protocol}//${window.location.hostname}:${API_PORT}`;
+
+    function showMessage(text, type = 'success') {
+      const container = document.querySelector('.message-container');
+      const box = document.createElement('div');
+      box.className = `message-box ${type}-msg`;
+      box.textContent = text;
+      container.appendChild(box);
+      setTimeout(() => { box.classList.add('show'); }, 10);
+      setTimeout(() => {
+        box.classList.remove('show');
+        setTimeout(() => { box.remove(); }, 400);
+      }, 4500);
+    }
+
+    async function apiFetch(endpoint, options = {}) {
+      const headers = options.headers || {};
+      headers['X-API-Key'] = API_KEY;
+      headers['Content-Type'] = 'application/json';
+      const cleanEndpoint = endpoint.startsWith('/') ? endpoint.substring(1) : endpoint;
+      const apiPath = cleanEndpoint.startsWith('api/v1/') ? cleanEndpoint : 'api/v1/' + cleanEndpoint;
+      const fullUrl = `${BASE_URL}/${apiPath}`;
+      const response = await fetch(fullUrl, { ...options, headers });
+      if (!response.ok) {
+        let errorText;
+        try {
+          const errJson = await response.json();
+          errorText = errJson.detail || JSON.stringify(errJson);
+        } catch {
+          errorText = await response.text();
+        }
+        throw new Error(errorText || `Erreur HTTP ${response.status}`);
+      }
+      return response.json();
+    }
+
+    function escapeHtml(unsafe) {
+      if (!unsafe) return '';
+      return unsafe.replace(/&/g, "&amp;").replace(/</g, "&lt;")
+                   .replace(/>/g, "&gt;").replace(/"/g, "&quot;")
+                   .replace(/'/g, "&#039;");
+    }
+
+    let currentFluxes = [];
+    let channelCache = {};
+    let aggressiveMode = false;
+    let selectedFluxes = new Set();
+    let categoryStats = {};
+    let errorDiagnostics = {};
+
+    async function loadStats() {
+      try {
+        const stats = await apiFetch('stats');
+        document.getElementById('jobCount').textContent = stats.jobCount;
+        document.getElementById('activeFluxCount').textContent = stats.activeFluxCount;
+        document.getElementById('totalFluxCount').textContent = stats.totalFluxCount;
+        document.getElementById('totalSentPill').textContent = `Envoyés: ${stats.totalSent}`;
+        aggressiveMode = !!stats.aggressiveMode;
+        document.getElementById('schedulerPill').textContent =
+          `Scheduler: ${stats.schedulerStatus} (${stats.categoryJobs.length} catégories) • Aggressif: ${aggressiveMode ? 'Oui' : 'Non'}`;
+        const toggleBtn = document.getElementById('toggleAggressiveBtn');
+        toggleBtn.textContent = aggressiveMode ? 'Désactiver mode 10s' : 'Activer mode 10s';
+        toggleBtn.className = aggressiveMode ? 'btn-secondary' : 'btn-green';
+      } catch (e) {
+        document.getElementById('schedulerPill').textContent = 'Scheduler: erreur';
+      }
+    }
+
+    async function hydrateChannels(fluxes) {
+      const ids = Array.from(new Set(fluxes.map(f => f.discordTarget)));
+      for (const id of ids) {
+        if (channelCache[id]) continue;
+        try {
+          channelCache[id] = await apiFetch(`discord/channel/${id}`, { method: 'GET' });
+        } catch {
+          channelCache[id] = { id, name: '(inconnu)', typeLabel: 'inconnu' };
+        }
+      }
+    }
+
+    function renderCategoryFilter(fluxes) {
+      const select = document.getElementById('filterCategory');
+      const cats = Array.from(new Set(fluxes.map(f => f.category || 'general'))).concat(['errors']).sort();
+      select.innerHTML = `<option value="">Toutes</option>` + cats.map(c => `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join('');
+      select.onchange = () => renderGroupedFlux(currentFluxes);
+      document.getElementById('searchInput').oninput = () => renderGroupedFlux(currentFluxes);
+      document.getElementById('quickView').onchange = () => renderGroupedFlux(currentFluxes);
+    }
+    function renderGroupedFlux(fluxes) {
+      const filterCat = document.getElementById('filterCategory').value;
+      const view = document.getElementById('quickView').value;
+      const q = document.getElementById('searchInput').value.toLowerCase().trim();
+
+      let list = fluxes.slice();
+      if (filterCat) {
+        if (filterCat === 'errors') list = list.filter(f => !!f.lastError);
+        else list = list.filter(f => (f.category || 'general') === filterCat);
+      }
+
+      if (view === 'errors') list = list.filter(f => !!f.lastError);
+      else if (view === 'inactive') list = list.filter(f => !f.active);
+      else if (view === 'healthy') list = list.filter(f => !f.lastError && f.active);
+
+      if (q) list = list.filter(f =>
+        (f.name || '').toLowerCase().includes(q) ||
+        (f.rssUrl || '').toLowerCase().includes(q) ||
+        (f.discordTarget || '').toLowerCase().includes(q)
+      );
+
+      const groups = {};
+      list.forEach(f => {
+        const key = f.discordTarget;
+        if (!groups[key]) groups[key] = [];
+        groups[key].push(f);
+      });
+
+      const container = document.getElementById('fluxGroups');
+      if (Object.keys(groups).length === 0) {
+        container.innerHTML = '<div class="muted small">Aucun flux selon ce filtre.</div>';
+        return;
+      }
+
+      let html = '';
+      for (const channelId of Object.keys(groups)) {
+        const ch = channelCache[channelId] || { name: '(inconnu)', typeLabel: 'inconnu' };
+        html += `<div class="card" style="margin-bottom:10px;">
+          <div class="row"><strong>Salon:</strong> ${escapeHtml(ch.name)} <span class="pill">${escapeHtml(ch.typeLabel)}</span> — ID: ${escapeHtml(channelId)}</div>
+          <table class="table">
+            <thead>
+              <tr>
+                <th><input type="checkbox" onchange="toggleSelectAll()"></th>
+                <th>Nom</th><th>Catégorie</th><th>Source</th><th>Mode</th><th>Intervalle</th>
+                <th>Statut</th><th>Dernier</th><th>Mentions</th><th>Filtres</th><th>Envoi</th><th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+        `;
+        groups[channelId].forEach(flux => {
+          const lastItemLink = flux.lastItem
+            ? `<a href="${escapeHtml(flux.lastItem)}" target="_blank">${escapeHtml(flux.lastItem).substring(0, 40)}...</a>`
+            : '<span class="muted">N/A</span>';
+          const filtersText = [
+            flux.includeKeywords?.length ? `incl: ${escapeHtml(flux.includeKeywords.join(', '))}` : '',
+            flux.excludeKeywords?.length ? `excl: ${escapeHtml(flux.excludeKeywords.join(', '))}` : '',
+            flux.regexInclude?.length ? `re+: ${escapeHtml(flux.regexInclude.join(', '))}` : '',
+            flux.regexExclude?.length ? `re-: ${escapeHtml(flux.regexExclude.join(', '))}` : '',
+            flux.domainWhitelist?.length ? `dom+: ${escapeHtml(flux.domainWhitelist.join(', '))}` : '',
+            flux.domainBlacklist?.length ? `dom-: ${escapeHtml(flux.domainBlacklist.join(', '))}` : '',
+            flux.dedupeWindowHours ? `dedupe: ${flux.dedupeWindowHours}h` : '',
+            flux.maxPerRun ? `max: ${flux.maxPerRun}` : ''
+          ].filter(Boolean).join(' | ');
+          const mentionsText = [
+            flux.mentionUserId ? `user: ${escapeHtml(flux.mentionUserId)}` : '',
+            flux.mentionRoleId ? `role: ${escapeHtml(flux.mentionRoleId)}` : ''
+          ].filter(Boolean).join(' | ');
+
+          const countSelectId = `count_${flux.id}`;
+          const statusBadge =
+            flux.lastError ? `<span class="badge badge-err" title="${escapeHtml(flux.lastError)}">Erreur</span>` :
+            flux.active ? `<span class="badge badge-ok">OK</span>` :
+            `<span class="badge badge-warn">Inactif</span>`;
+
+          html += `
+            <tr>
+              <td><input type="checkbox" class="flux-checkbox" value="${flux.id}" onchange="toggleFluxSelection('${flux.id}', this)"></td>
+              <td>${escapeHtml(flux.name || (flux.id ? flux.id.substring(0, 8) : '(id)'))}</td>
+              <td><span class="pill">${escapeHtml(flux.category || 'general')}</span></td>
+              <td><span class="pill">${escapeHtml(flux.sourceType || 'web')}</span> <br/><a href="${escapeHtml(flux.rssUrl)}" target="_blank">${escapeHtml(flux.rssUrl).substring(0, 40)}...</a></td>
+              <td>${escapeHtml(flux.mode)}</td>
+              <td>${flux.interval}s</td>
+              <td>${statusBadge}</td>
+              <td>${lastItemLink}</td>
+              <td class="small">${mentionsText || '-'}</td>
+              <td class="small">${filtersText || '-'}</td>
+              <td class="flex">
+                <select id="${countSelectId}">
+                  <option>1</option><option>3</option><option>5</option><option>10</option><option>20</option><option>30</option><option>40</option><option>50</option>
+                </select>
+                <button class="btn-green" onclick="manualSendFlux('${flux.id}', '${countSelectId}')">Envoyer</button>
+              </td>
+              <td class="flex">
+                <button onclick="toggleActive('${flux.id}', ${!flux.active})">${flux.active ? 'Désactiver' : 'Activer'}</button>
+                <button class="btn-secondary" onclick="openEditModal('${flux.id}')">Éditer</button>
+                <button class="btn-danger" onclick="deleteFlux('${flux.id}')">Supprimer</button>
+              </td>
+            </tr>
+          `;
+        });
+        html += `</tbody></table></div>`;
+      }
+      container.innerHTML = html;
+    }
+
+    // Fonction pour gérer les erreurs
+    function updateErrorSection(fluxes) {
+      const errorFluxes = fluxes.filter(f => f.lastError);
+      const section = document.getElementById('errorSection');
+      const list = document.getElementById('errorList');
+      
+      if (errorFluxes.length === 0) {
+        section.style.display = 'none';
+        return;
+      }
+      
+      section.style.display = 'block';
+      list.innerHTML = errorFluxes.map(flux => `
+        <div class="error-item animate-in">
+          <div class="error-title">${escapeHtml(flux.name || flux.id)}</div>
+          <div class="error-message">${escapeHtml(flux.lastError)}</div>
+        </div>
+      `).join('');
+    }
+
+    async function loadFluxes() {
+      try {
+        currentFluxes = await apiFetch('fluxes');
+        await hydrateChannels(currentFluxes);
+        renderCategoryFilter(currentFluxes);
+        renderGroupedFlux(currentFluxes);
+        await loadStats();
+        updateErrorSection(currentFluxes);
+      } catch (e) {
+        currentFluxes = [];
+        renderCategoryFilter([]);
+        renderGroupedFlux([]);
+        showMessage(e.message, 'error');
+      }
+    }
+
+    async function toggleActive(id, makeActive) {
+      try {
+        await apiFetch(`fluxes/${id}`, { method: 'PUT', body: JSON.stringify({ active: makeActive }) });
+        showMessage(makeActive ? 'Flux activé.' : 'Flux désactivé.');
+        await loadFluxes();
+      } catch (e) { showMessage(e.message, 'error'); }
+    }
+
+    async function deleteFlux(id) {
+      const confirmation = prompt(`Confirmez la suppression du flux ${id} en tapant 'SUPPRIMER' :`);
+      if (confirmation !== 'SUPPRIMER') return;
+      try {
+        await apiFetch(`fluxes/${id}`, { method: 'DELETE' });
+        showMessage(`Flux ${id} supprimé.`);
+        await loadFluxes();
+      } catch (e) { showMessage(e.message, 'error'); }
+    }
+
+    async function manualSendFlux(id, selectId) {
+      const select = document.getElementById(selectId);
+      const count = parseInt(select.value, 10);
+      try {
+        const data = await apiFetch(`send-from-flux/${id}`, {
+          method: 'POST',
+          body: JSON.stringify({ count })
+        });
+        showMessage(`Flux ${id}: ${data.sent}/${data.requested} envoyés. ${data.errors.length ? 'Erreurs: ' + data.errors.length : 'OK'}`);
+      } catch (err) {
+        showMessage("Erreur: " + err.message, 'error');
+      }
+    }    // Channels dropdown — Add form
+    document.getElementById('loadGuildChannelsAddBtn').addEventListener('click', async () => {
+      const guildId = document.getElementById('guildIdAdd').value.trim();
+      const dropdown = document.getElementById('addDiscordDropdown');
+      dropdown.innerHTML = '<option>Chargement...</option>';
+      if (!guildId) { dropdown.innerHTML = '<option>ID serveur requis</option>'; return; }
+      try {
+        const channels = await apiFetch(`discord/guild/${guildId}/channels`, { method: 'GET' });
+        if (!channels.length) { dropdown.innerHTML = '<option>Aucun salon trouvé</option>'; return; }
+        dropdown.innerHTML = '<option value="">Sélectionner un salon</option>' +
+          channels.map(c => `<option value="${escapeHtml(c.id)}">${escapeHtml(c.name)} (${escapeHtml(c.typeLabel)})</option>`).join('');
+        dropdown.onchange = () => {
+          const val = dropdown.value;
+          if (val) document.getElementById('addDiscordTarget').value = val;
+        };
+        showMessage('Salons chargés dans le menu déroulant.');
+      } catch (err) {
+        dropdown.innerHTML = '<option>Erreur de chargement</option>';
+        showMessage(err.message, 'error');
+      }
+    });
+
+    // Tools panel dropdown
+    document.getElementById('loadGuildChannelsBtn').addEventListener('click', async () => {
+      const guildId = document.getElementById('guildIdInput').value.trim();
+      const dropdown = document.getElementById('guildChannelsDropdown');
+      dropdown.innerHTML = '<option>Chargement...</option>';
+      if (!guildId) { dropdown.innerHTML = '<option>ID serveur requis</option>'; return; }
+      try {
+        const channels = await apiFetch(`discord/guild/${guildId}/channels`, { method: 'GET' });
+        if (!channels.length) { dropdown.innerHTML = '<option>Aucun salon trouvé</option>'; return; }
+        dropdown.innerHTML = '<option value="">Sélectionner un salon</option>' +
+          channels.map(c => `<option value="${escapeHtml(c.id)}">${escapeHtml(c.name)} (${escapeHtml(c.typeLabel)})</option>`).join('');
+      } catch (err) {
+        dropdown.innerHTML = '<option>Erreur de chargement</option>';
+        showMessage(err.message, 'error');
+      }
+    });
+
+    document.getElementById('clearGuildChannelsBtn').addEventListener('click', () => {
+      document.getElementById('guildChannelsDropdown').innerHTML = '';
+    });
+
+    // Add Flux submit
+    document.getElementById('addFluxForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const form = e.target;
+      const parseCsv = v => (v || '').split(',').map(s => s.trim()).filter(Boolean);
+
+      const data = {
+        rssUrl: form.rssUrl.value.trim(),
+        discordTarget: form.discordTarget.value.trim(),
+        name: form.name.value.trim() || null,
+        interval: Math.max(60, parseInt(form.interval?.value || '300', 10)),
+        mode: form.mode?.value || 'direct',
+        category: form.category.value,
+        sourceType: form.sourceType.value,
+        active: (form.active?.value || 'true') === 'true',
+        allowEmbeds: (form.allowEmbeds?.value || 'false') === 'true',
+        messageTemplate: form.messageTemplate?.value?.trim() || null,
+        mentionUserId: form.mentionUserId?.value?.trim() || null,
+        mentionRoleId: form.mentionRoleId?.value?.trim() || null,
+        includeKeywords: parseCsv(form.includeKeywords?.value),
+        excludeKeywords: parseCsv(form.excludeKeywords?.value),
+        regexInclude: parseCsv(form.regexInclude?.value),
+        regexExclude: parseCsv(form.regexExclude?.value),
+        domainWhitelist: parseCsv(form.domainWhitelist?.value),
+        domainBlacklist: parseCsv(form.domainBlacklist?.value),
+        language: form.language?.value?.trim() || null,
+        dedupeWindowHours: Math.max(0, parseInt(form.dedupeWindowHours?.value || '24', 10)),
+        maxPerRun: Math.min(50, Math.max(1, parseInt(form.maxPerRun?.value || '5', 10))),
+        quietHoursStart: form.quietHoursStart?.value?.trim() || null,
+        quietHoursEnd: form.quietHoursEnd?.value?.trim() || null,
+        dailyCap: form.dailyCap?.value ? parseInt(form.dailyCap.value, 10) : null
+      };
+      try {
+        await apiFetch('fluxes', { method: 'POST', body: JSON.stringify(data) });
+        showMessage('Flux ajouté et planifié.');
+        form.reset();
+        await loadFluxes();
+      } catch (err) { showMessage(err.message, 'error'); }
+    });
+
+    // Toggle aggressive mode
+    document.getElementById('toggleAggressiveBtn').addEventListener('click', async () => {
+      try {
+        const data = await apiFetch('aggressive-mode', { method: 'POST', body: JSON.stringify({ enable: !aggressiveMode }) });
+        showMessage(data.message);
+        await loadStats();
+      } catch (err) { showMessage(err.message, 'error'); }
+    });
+
+    // Test RSS form
+    document.getElementById('testRssForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const testUrl = document.getElementById('testRssUrl').value.trim();
+      const sourceType = document.getElementById('testSourceType').value;
+      const resultDiv = document.getElementById('testResult');
+      resultDiv.innerHTML = 'Chargement...';
+      try {
+        const data = await apiFetch('preview-rss', { method: 'POST', body: JSON.stringify({ rssUrl: testUrl, sourceType, count: 5 }) });
+        let html = `<strong>Prévisualisation :</strong><ul>`;
+        html += data.map(i => `<li>${escapeHtml(i.title || 'Sans titre')} — <a href="${escapeHtml(i.link)}" target="_blank">lien</a></li>`).join('');
+        html += `</ul>`;
+        resultDiv.innerHTML = html;
+      } catch (err) {
+        resultDiv.innerHTML = `<div class="message-box" style="background:#1f2937;">${escapeHtml(err.message)}</div>`;
+      }
+    });
+
+    // Edit modal avec onglets
+    function openEditModal(fluxId) {
+      const flux = currentFluxes.find(f => f.id === fluxId);
+      if (!flux) return showMessage('Flux introuvable.', 'error');
+
+      const backdrop = document.createElement('div');
+      backdrop.className = 'modal-backdrop';
+
+      const modal = document.createElement('div');
+      modal.className = 'modal';
+      modal.innerHTML = `
+        <h3>Éditer le flux</h3>
+        <div class="tabs">
+          <button type="button" class="tab-btn active" data-tab="general">Infos générales</button>
+          <button type="button" class="tab-btn" data-tab="filters">Filtres</button>
+          <button type="button" class="tab-btn" data-tab="mentions">Mentions & Options</button>
+        </div>
+        <form id="editFluxForm">
+          <div class="tab-content" id="tab-general">
+            <label>Nom</label>
+            <input type="text" name="name" value="${escapeHtml(flux.name || '')}"/>
+            <label>Catégorie</label>
+            <input type="text" name="category" value="${escapeHtml(flux.category || '')}"/>
+            <label>Nouvelle URL RSS</label>
+            <input type="text" name="newRssUrl" value=""/>
+            <label>Type de source</label>
+            <select name="sourceType">
+              <option value="web" ${flux.sourceType==='web'?'selected':''}>Web</option>
+              <option value="youtube" ${flux.sourceType==='youtube'?'selected':''}>YouTube</option>
+              <option value="facebook" ${flux.sourceType==='facebook'?'selected':''}>Facebook</option>
+              <option value="instagram" ${flux.sourceType==='instagram'?'selected':''}>Instagram</option>
+              <option value="tiktok" ${flux.sourceType==='tiktok'?'selected':''}>TikTok</option>
+            </select>
+            <label>Salon Discord</label>
+            <input type="text" name="discordTarget" value="${escapeHtml(flux.discordTarget)}"/>
+            <label>Intervalle (s)</label>
+            <input type="number" name="interval" value="${flux.interval || 300}" min="60"/>
+            <label>Mode</label>
+            <select name="mode">
+              <option value="direct" ${flux.mode==='direct'?'selected':''}>Direct</option>
+              <option value="thread" ${flux.mode==='thread'?'selected':''}>Thread</option>
+            </select>
+            <label>Actif</label>
+            <select name="active">
+              <option value="true" ${flux.active?'selected':''}>Oui</option>
+              <option value="false" ${!flux.active?'selected':''}>Non</option>
+            </select>
+            <label>Embeds</label>
+            <select name="allowEmbeds">
+              <option value="false" ${!flux.allowEmbeds?'selected':''}>Non</option>
+              <option value="true" ${flux.allowEmbeds?'selected':''}>Oui</option>
+            </select>
+          </div>
+
+          <div class="tab-content" id="tab-filters" style="display:none;">
+            <label>Mots-clés inclus</label>
+            <input type="text" name="includeKeywords" value="${escapeHtml((flux.includeKeywords||[]).join(', '))}"/>
+            <label>Mots-clés exclus</label>
+            <input type="text" name="excludeKeywords" value="${escapeHtml((flux.excludeKeywords||[]).join(', '))}"/>
+            <label>Regex inclus</label>
+            <input type="text" name="regexInclude" value="${escapeHtml((flux.regexInclude||[]).join(', '))}"/>
+            <label>Regex exclus</label>
+            <input type="text" name="regexExclude" value="${escapeHtml((flux.regexExclude||[]).join(', '))}"/>
+            <label>Domaines autorisés</label>
+            <input type="text" name="domainWhitelist" value="${escapeHtml((flux.domainWhitelist||[]).join(', '))}"/>
+            <label>Domaines interdits</label>
+            <input type="text" name="domainBlacklist" value="${escapeHtml((flux.domainBlacklist||[]).join(', '))}"/>
+            <label>Langue</label>
+            <input type="text" name="language" value="${escapeHtml(flux.language || '')}"/>
+            <label>Fenêtre de déduplication (heures)</label>
+            <input type="number" name="dedupeWindowHours" value="${flux.dedupeWindowHours || 24}"/>
+            <label>Max par exécution</label>
+            <input type="number" name="maxPerRun" value="${flux.maxPerRun || 5}"/>
+            <label>Heures calmes début</label>
+            <input type="text" name="quietHoursStart" value="${escapeHtml(flux.quietHoursStart || '')}"/>
+            <label>Heures calmes fin</label>
+            <input type="text" name="quietHoursEnd" value="${escapeHtml(flux.quietHoursEnd || '')}"/>
+            <label>Plafond quotidien</label>
+            <input type="number" name="dailyCap" value="${flux.dailyCap || ''}"/>
+          </div>
+
+          <div class="tab-content" id="tab-mentions" style="display:none;">
+            <label>Template de message</label>
+            <input type="text" name="messageTemplate" value="${escapeHtml(flux.messageTemplate || '')}"/>
+            <label>Mention utilisateur ID</label>
+            <input type="text" name="mentionUserId" value="${escapeHtml(flux.mentionUserId || '')}"/>
+            <label>Mention rôle ID</label>
+            <input type="text" name="mentionRoleId" value="${escapeHtml(flux.mentionRoleId || '')}"/>
+          </div>
+
+          <div class="flex" style="margin-top:12px;">
+            <button type="submit">Enregistrer</button>
+            <button type="button" class="btn-secondary" id="cancelEditBtn">Annuler</button>
+          </div>
+        </form>
+      `;
+
+      backdrop.appendChild(modal);
+      document.body.appendChild(backdrop);
+
+      // Tabs logic
+      modal.querySelectorAll('.tab-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          modal.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+          btn.classList.add('active');
+          modal.querySelectorAll('.tab-content').forEach(tc => tc.style.display = 'none');
+          modal.querySelector(`#tab-${btn.dataset.tab}`).style.display = 'block';
+        });
+      });
+
+      // Fermer
+      modal.querySelector('#cancelEditBtn').onclick = () => backdrop.remove();
+      backdrop.addEventListener('click', (e) => { if (e.target === backdrop) backdrop.remove(); });
+
+      // Soumission
+      modal.querySelector('#editFluxForm').onsubmit = async (e) => {
+        e.preventDefault();
+        const form = e.target;
+        const parseCsv = v => (v || '').split(',').map(s => s.trim()).filter(Boolean);
+        const data = {
+          name: form.name.value.trim() || null,
+          category: form.category.value.trim() || null,
+          newRssUrl: form.newRssUrl.value.trim() || null,
+          sourceType: form.sourceType.value,
+          discordTarget: form.discordTarget.value.trim(),
+          interval: parseInt(form.interval.value, 10),
+          mode: form.mode.value,
+          active: form.active.value === 'true',
+          allowEmbeds: form.allowEmbeds.value === 'true',
+          messageTemplate: form.messageTemplate.value.trim() || null,
+          mentionUserId: form.mentionUserId.value.trim() || null,
+          mentionRoleId: form.mentionRoleId.value.trim() || null,
+          includeKeywords: parseCsv(form.includeKeywords?.value),
+          excludeKeywords: parseCsv(form.excludeKeywords?.value),
+          regexInclude: parseCsv(form.regexInclude?.value),
+          regexExclude: parseCsv(form.regexExclude?.value),
+          domainWhitelist: parseCsv(form.domainWhitelist?.value),
+          domainBlacklist: parseCsv(form.domainBlacklist?.value),
+          language: form.language?.value?.trim() || null,
+          dedupeWindowHours: form.dedupeWindowHours?.value ? parseInt(form.dedupeWindowHours.value, 10) : null,
+          maxPerRun: form.maxPerRun?.value ? parseInt(form.maxPerRun.value, 10) : null,
+          quietHoursStart: form.quietHoursStart?.value?.trim() || null,
+          quietHoursEnd: form.quietHoursEnd?.value?.trim() || null,
+          dailyCap: form.dailyCap?.value ? parseInt(form.dailyCap.value, 10) : null
+        };
+        try {
+          await apiFetch(`fluxes/${fluxId}`, { method: 'PUT', body: JSON.stringify(data) });
+          showMessage('Flux mis à jour.');
+          backdrop.remove();
+          await loadFluxes();
+        } catch (err) {
+          showMessage(err.message, 'error');
+        }
+      };
+    }
+
+    // Nouvelles fonctions pour les statistiques par catégorie
+    async function loadCategoryStats() {
+      try {
+        const stats = await apiFetch('stats/categories');
+        categoryStats = stats.categories;
+        renderCategoryStats();
+      } catch (e) {
+        console.error('Erreur chargement stats catégories:', e);
+      }
+    }
+
+    function renderCategoryStats() {
+      const container = document.getElementById('categoryStats');
+      if (!categoryStats || Object.keys(categoryStats).length === 0) {
+        container.innerHTML = '<div class="muted">Aucune donnée disponible</div>';
+        return;
+      }
+
+      let html = '';
+      for (const [category, stats] of Object.entries(categoryStats)) {
+        const healthColor = stats.health === 'healthy' ? 'var(--green)' : 'var(--warning)';
+        html += `
+          <div class="category-card" style="border-left: 3px solid ${healthColor}">
+            <div class="category-name">${escapeHtml(category)}</div>
+            <div class="category-metrics">
+              <span>Total: ${stats.total}</span>
+              <span>Actifs: ${stats.active}</span>
+              <span>Erreurs: ${stats.errors}</span>
+              <span>Envoyés: ${stats.totalSent}</span>
+            </div>
+          </div>
+        `;
+      }
+      container.innerHTML = html;
+    }
+
+    // Gestion améliorée des erreurs avec diagnostics
+    async function refreshErrorDiagnostics() {
+      try {
+        errorDiagnostics = await apiFetch('diagnostics/errors');
+        updateErrorSection(currentFluxes);
+      } catch (e) {
+        console.error('Erreur diagnostics:', e);
+      }
+    }
+
+    function toggleErrorSection() {
+      const section = document.getElementById('errorSection');
+      const content = document.getElementById('errorContent');
+      section.classList.toggle('collapsed');
+      content.style.display = section.classList.contains('collapsed') ? 'none' : 'block';
+    }
+
+    async function bulkFixErrors() {
+      const errorFluxes = currentFluxes.filter(f => f.lastError);
+      if (errorFluxes.length === 0) return;
+      
+      if (!confirm(`Voulez-vous réessayer ${errorFluxes.length} flux en erreur ?`)) return;
+      
+      for (const flux of errorFluxes) {
+        try {
+          await retryFlux(flux.id);
+          await new Promise(resolve => setTimeout(resolve, 500));
+        } catch (e) {
+          console.error(`Erreur retry flux ${flux.id}:`, e);
+        }
+      }
+      
+      showMessage(`Retry effectué sur ${errorFluxes.length} flux`);
+      await loadFluxes();
+    }
+
+    async function retryFlux(fluxId) {
+      try {
+        await apiFetch(`send-from-flux/${fluxId}`, {
+          method: 'POST',
+          body: JSON.stringify({ count: 1 })
+        });
+        showMessage(`Flux ${fluxId} réessayé`);
+      } catch (e) {
+        throw e;
+      }
+    }
+
+    // Actions en lot
+    function toggleSelectAll() {
+      const selectAll = document.getElementById('selectAll');
+      const checkboxes = document.querySelectorAll('.flux-checkbox');
+      
+      checkboxes.forEach(cb => {
+        cb.checked = selectAll.checked;
+        if (selectAll.checked) {
+          selectedFluxes.add(cb.value);
+        } else {
+          selectedFluxes.delete(cb.value);
+        }
+      });
+      
+      updateSelectedCount();
+    }
+
+    function toggleFluxSelection(fluxId, checkbox) {
+      if (checkbox.checked) {
+        selectedFluxes.add(fluxId);
+      } else {
+        selectedFluxes.delete(fluxId);
+      }
+      updateSelectedCount();
+    }
+
+    function updateSelectedCount() {
+      document.getElementById('selectedCount').textContent = `${selectedFluxes.size} sélectionné(s)`;
+    }
+
+    async function executeBulkAction() {
+      const action = document.getElementById('bulkAction').value;
+      const params = document.getElementById('bulkParams').value.trim();
+      
+      if (!action || selectedFluxes.size === 0) {
+        showMessage('Sélectionnez une action et au moins un flux', 'error');
+        return;
+      }
+
+      if (action === 'delete' && !confirm(`Supprimer ${selectedFluxes.size} flux ?`)) {
+        return;
+      }
+
+      try {
+        const requestData = {
+          action: action,
+          fluxIds: Array.from(selectedFluxes),
+          params: {}
+        };
+
+        if (action === 'change_category' && params) {
+          requestData.params.category = params;
+        } else if (action === 'change_interval' && params) {
+          requestData.params.interval = parseInt(params, 10);
+        }
+
+        const result = await apiFetch('bulk-actions', {
+          method: 'POST',
+          body: JSON.stringify(requestData)
+        });
+
+        showMessage(`${result.success} flux traités, ${result.errors.length} erreurs`);
+        if (result.errors.length > 0) {
+          console.log('Erreurs bulk:', result.errors);
+        }
+
+        selectedFluxes.clear();
+        await loadFluxes();
+      } catch (e) {
+        showMessage('Erreur action en lot: ' + e.message, 'error');
+      }
+    }
+
+    // Recherche avancée
+    function toggleAdvancedSearch() {
+      const content = document.getElementById('advancedSearchContent');
+      const toggle = document.getElementById('searchToggle');
+      const isVisible = content.style.display !== 'none';
+      
+      content.style.display = isVisible ? 'none' : 'block';
+      toggle.textContent = isVisible ? '▶' : '▼';
+    }
+
+    function resetAdvancedSearch() {
+      document.getElementById('advancedSearchForm').reset();
+    }
+
+    // Recherche avancée submit
+    document.getElementById('advancedSearchForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const form = e.target;
+      const formData = new FormData(form);
+      const searchParams = {};
+      
+      for (const [key, value] of formData.entries()) {
+        if (value.trim()) {
+          if (key === 'active' || key === 'hasErrors') {
+            searchParams[key] = value === 'true';
+          } else if (key === 'minInterval' || key === 'maxInterval') {
+            searchParams[key] = parseInt(value, 10);
+          } else {
+            searchParams[key] = value.trim();
+          }
+        }
+      }
+
+      try {
+        const results = await apiFetch('search-fluxes', {
+          method: 'POST',
+          body: JSON.stringify(searchParams)
+        });
+        
+        currentFluxes = results;
+        await hydrateChannels(currentFluxes);
+        renderGroupedFlux(currentFluxes);
+        showMessage(`${results.length} flux trouvés`);
+      } catch (e) {
+        showMessage('Erreur recherche: ' + e.message, 'error');
+      }
+    });
+
+    // Mise à jour de la fonction updateErrorSection
+    function updateErrorSection(fluxes) {
+      const errorFluxes = fluxes.filter(f => f.lastError);
+      const section = document.getElementById('errorSection');
+      const list = document.getElementById('errorList');
+      const count = document.getElementById('errorCount');
+      const summary = document.getElementById('errorSummary');
+      
+      if (errorFluxes.length === 0) {
+        section.style.display = 'none';
+        return;
+      }
+      
+      section.style.display = 'block';
+      count.textContent = errorFluxes.length;
+      
+      // Summary des types d'erreurs
+      if (errorDiagnostics.summary) {
+        summary.innerHTML = Object.entries(errorDiagnostics.summary).map(([type, count]) =>
+          `<span class="error-type-badge">${type}: ${count}</span>`
+        ).join('');
+      }
+      
+      list.innerHTML = errorFluxes.map(flux => `
+        <div class="error-item">
+          <div class="error-title">
+            ${escapeHtml(flux.name || flux.id)}
+            <span class="pill">${escapeHtml(flux.category || 'general')}</span>
+          </div>
+          <div class="error-message">${escapeHtml(flux.lastError)}</div>
+          <div class="error-actions">
+            <button class="btn-small btn-secondary" onclick="retryFlux('${flux.id}')">Réessayer</button>
+            <button class="btn-small btn-secondary" onclick="openEditModal('${flux.id}')">Éditer</button>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    // Mise à jour de loadFluxes pour inclure les nouvelles fonctionnalités
+    async function loadFluxes() {
+      try {
+        currentFluxes = await apiFetch('fluxes');
+        await hydrateChannels(currentFluxes);
+        renderCategoryFilter(currentFluxes);
+        renderGroupedFlux(currentFluxes);
+        await loadStats();
+        await loadCategoryStats();
+        await refreshErrorDiagnostics();
+        updateErrorSection(currentFluxes);
+      } catch (e) {
+        currentFluxes = [];
+        renderCategoryFilter([]);
+        renderGroupedFlux([]);
+        showMessage(e.message, 'error');
+      }
+    }
+
+    // Gestion des catégories personnalisées
+    document.getElementById('addCategorySelect').addEventListener('change', function() {
+      const customInput = document.getElementById('addCustomCategory');
+      if (this.value === 'custom') {
+        customInput.style.display = 'block';
+        customInput.required = true;
+      } else {
+        customInput.style.display = 'none';
+        customInput.required = false;
+        customInput.value = '';
+      }
+    });
+
+    // Diagnostic Discord
+    async function testDiscordConnection() {
+      try {
+        const result = await apiFetch('discord/test');
+        const statusDiv = document.getElementById('discordStatus');
+        if (result.success) {
+          statusDiv.innerHTML = `
+            <div style="color: var(--green);">✅ Bot connecté: ${escapeHtml(result.bot_name)}</div>
+            <div class="small">Serveurs: ${result.guilds_count} | ID: ${result.bot_id}</div>
+          `;
+        } else {
+          statusDiv.innerHTML = `<div style="color: var(--danger);">❌ ${escapeHtml(result.error)}</div>`;
+        }
+      } catch (e) {
+        document.getElementById('discordStatus').innerHTML = `<div style="color: var(--danger);">❌ Erreur: ${escapeHtml(e.message)}</div>`;
+      }
+    }
+
+    async function restartDiscordBot() {
+      try {
+        const result = await apiFetch('bot/restart-discord', { method: 'POST' });
+        if (result.success) {
+          showMessage('Bot Discord redémarré');
+          await testDiscordConnection();
+        } else {
+          showMessage('Erreur redémarrage: ' + result.message, 'error');
+        }
+      } catch (e) {
+        showMessage('Erreur: ' + e.message, 'error');
+      }
+    }
+
+    // Export/Import
+    async function exportFluxes() {
+      try {
+        const result = await apiFetch('export/fluxes');
+        if (result.success) {
+          const dataStr = JSON.stringify(result, null, 2);
+          const dataUri = 'data:application/json;charset=utf-8,'+ encodeURIComponent(dataStr);
+          const exportFileDefaultName = `rssdi-export-${new Date().toISOString().split('T')[0]}.json`;
+          
+          const linkElement = document.createElement('a');
+          linkElement.setAttribute('href', dataUri);
+          linkElement.setAttribute('download', exportFileDefaultName);
+          linkElement.click();
+          
+          showMessage(`${result.count} flux exportés`);
+        }
+      } catch (e) {
+        showMessage('Erreur export: ' + e.message, 'error');
+      }
+    }
+
+    async function importFluxes(file) {
+      try {
+        const text = await file.text();
+        const data = JSON.parse(text);
+        
+        const result = await apiFetch('import/fluxes', {
+          method: 'POST',
+          body: JSON.stringify({ data: data.data || data })
+        });
+        
+        if (result.success) {
+          showMessage(`${result.imported} flux importés (${result.errors.length} erreurs)`);
+          if (result.errors.length > 0) {
+            console.log('Erreurs import:', result.errors);
+          }
+          await loadFluxes();
+        }
+      } catch (e) {
+        showMessage('Erreur import: ' + e.message, 'error');
+      }
+    }
+
+    async function getSystemInfo() {
+      try {
+        const result = await apiFetch('system/info');
+        const infoDiv = document.getElementById('systemInfo');
+        if (result.application) {
+          infoDiv.innerHTML = `
+            <div><strong>${result.application.name} v${result.application.version}</strong></div>
+            <div class="small">Python ${result.system.python_version} | ${result.system.platform}</div>
+            <div class="small">RAM: ${(result.system.memory_available / 1024 / 1024 / 1024).toFixed(1)}GB disponible</div>
+            <div class="small">Discord: ${result.configuration.discord_token_configured ? '✅' : '❌'} | DB: ${result.configuration.mongo_connected ? '✅' : '❌'}</div>
+          `;
+        }
+      } catch (e) {
+        document.getElementById('systemInfo').innerHTML = `Erreur: ${e.message}`;
+      }
+    }
+
+    // Event listeners pour les nouveaux boutons
+    document.getElementById('testDiscordBtn').addEventListener('click', testDiscordConnection);
+    document.getElementById('restartDiscordBtn').addEventListener('click', restartDiscordBot);
+    document.getElementById('exportFluxesBtn').addEventListener('click', exportFluxes);
+    document.getElementById('systemInfoBtn').addEventListener('click', getSystemInfo);
+    
+    document.getElementById('importFluxesBtn').addEventListener('click', () => {
+      document.getElementById('importFile').click();
+    });
+    
+    document.getElementById('importFile').addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      if (file) {
+        importFluxes(file);
+      }
+    });
+
+    // Mise à jour de la soumission du formulaire pour gérer les catégories personnalisées
+    const originalFormHandler = document.getElementById('addFluxForm').onsubmit;
+    document.getElementById('addFluxForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const form = e.target;
+      const parseCsv = v => (v || '').split(',').map(s => s.trim()).filter(Boolean);
+
+      // Gérer la catégorie personnalisée
+      let category = form.category.value;
+      if (category === 'custom') {
+        category = form.customCategory.value.trim();
+        if (!category) {
+          showMessage('Veuillez saisir un nom de catégorie personnalisé', 'error');
+          return;
+        }
+      }
+
+      const data = {
+        rssUrl: form.rssUrl.value.trim(),
+        discordTarget: form.discordTarget.value.trim(),
+        name: form.name.value.trim() || null,
+        interval: Math.max(60, parseInt(form.interval?.value || '300', 10)),
+        mode: form.mode?.value || 'direct',
+        category: category,
+        sourceType: form.sourceType.value,
+        active: (form.active?.value || 'true') === 'true',
+        allowEmbeds: (form.allowEmbeds?.value || 'false') === 'true',
+        messageTemplate: form.messageTemplate?.value?.trim() || null,
+        mentionUserId: form.mentionUserId?.value?.trim() || null,
+        mentionRoleId: form.mentionRoleId?.value?.trim() || null,
+        includeKeywords: parseCsv(form.includeKeywords?.value),
+        excludeKeywords: parseCsv(form.excludeKeywords?.value),
+        regexInclude: parseCsv(form.regexInclude?.value),
+        regexExclude: parseCsv(form.regexExclude?.value),
+        domainWhitelist: parseCsv(form.domainWhitelist?.value),
+        domainBlacklist: parseCsv(form.domainBlacklist?.value),
+        language: form.language?.value?.trim() || null,
+        dedupeWindowHours: Math.max(0, parseInt(form.dedupeWindowHours?.value || '24', 10)),
+        maxPerRun: Math.min(50, Math.max(1, parseInt(form.maxPerRun?.value || '5', 10))),
+        quietHoursStart: form.quietHoursStart?.value?.trim() || null,
+        quietHoursEnd: form.quietHoursEnd?.value?.trim() || null,
+        dailyCap: form.dailyCap?.value ? parseInt(form.dailyCap.value, 10) : null
+      };
+      try {
+        await apiFetch('fluxes', { method: 'POST', body: JSON.stringify(data) });
+        showMessage('Flux ajouté et planifié.');
+        form.reset();
+        document.getElementById('addCustomCategory').style.display = 'none';
+        await loadFluxes();
+      } catch (err) { showMessage(err.message, 'error'); }
+    });
+
+    // Boot
+    window.onload = () => {
+      loadFluxes();
+      testDiscordConnection();
+      getSystemInfo();
+      setInterval(loadFluxes, 10000);
+    };
+  </script>
+</body>
+</html>

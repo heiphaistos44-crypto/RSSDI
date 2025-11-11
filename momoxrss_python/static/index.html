@@ -1,0 +1,1154 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>RSSDI v4.0 - Dashboard</title>
+  <style>
+    /* ===== VARIABLES & RESET ===== */
+    :root {
+      /* Couleurs principales */
+      --bg-primary: #0f172a;
+      --bg-secondary: #1e293b;
+      --bg-tertiary: #334155;
+      --bg-hover: #475569;
+      
+      /* Texte */
+      --text-primary: #f8fafc;
+      --text-secondary: #cbd5e1;
+      --text-muted: #94a3b8;
+      
+      /* Accents */
+      --accent-primary: #3b82f6;
+      --accent-hover: #2563eb;
+      --accent-success: #10b981;
+      --accent-warning: #f59e0b;
+      --accent-error: #ef4444;
+      
+      /* Bordures */
+      --border-color: #334155;
+      --border-radius: 12px;
+      --border-radius-sm: 8px;
+      
+      /* Ombres */
+      --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.3);
+      --shadow-md: 0 4px 6px rgba(0, 0, 0, 0.3);
+      --shadow-lg: 0 10px 15px rgba(0, 0, 0, 0.4);
+      
+      /* Transitions */
+      --transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+      background: linear-gradient(135deg, var(--bg-primary) 0%, #1e293b 100%);
+      color: var(--text-primary);
+      line-height: 1.6;
+      min-height: 100vh;
+    }
+
+    /* ===== LAYOUT ===== */
+    .container {
+      max-width: 1400px;
+      margin: 0 auto;
+      padding: 2rem;
+    }
+
+    /* ===== HEADER ===== */
+    .header {
+      background: var(--bg-secondary);
+      border-radius: var(--border-radius);
+      padding: 2rem;
+      margin-bottom: 2rem;
+      box-shadow: var(--shadow-lg);
+      border: 1px solid var(--border-color);
+    }
+
+    .header-content {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 1rem;
+    }
+
+    .header-title {
+      font-size: 2rem;
+      font-weight: 700;
+      background: linear-gradient(135deg, var(--accent-primary), var(--accent-success));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    .header-version {
+      background: var(--bg-tertiary);
+      padding: 0.5rem 1rem;
+      border-radius: var(--border-radius-sm);
+      font-size: 0.875rem;
+      color: var(--text-secondary);
+    }
+
+    /* ===== STATS CARDS ===== */
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+      gap: 1.5rem;
+      margin-bottom: 2rem;
+    }
+
+    .stat-card {
+      background: var(--bg-secondary);
+      border-radius: var(--border-radius);
+      padding: 1.5rem;
+      border: 1px solid var(--border-color);
+      box-shadow: var(--shadow-md);
+      transition: var(--transition);
+    }
+
+    .stat-card:hover {
+      transform: translateY(-4px);
+      box-shadow: var(--shadow-lg);
+    }
+
+    .stat-card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 0.75rem;
+    }
+
+    .stat-card-title {
+      color: var(--text-secondary);
+      font-size: 0.875rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .stat-card-icon {
+      font-size: 1.5rem;
+    }
+
+    .stat-card-value {
+      font-size: 2rem;
+      font-weight: 700;
+      color: var(--text-primary);
+    }
+
+    .stat-card-trend {
+      font-size: 0.875rem;
+      color: var(--text-muted);
+      margin-top: 0.5rem;
+    }
+
+    /* ===== BUTTONS ===== */
+    .btn {
+      padding: 0.75rem 1.5rem;
+      border-radius: var(--border-radius-sm);
+      border: none;
+      font-weight: 600;
+      cursor: pointer;
+      transition: var(--transition);
+      font-size: 0.875rem;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .btn-primary {
+      background: var(--accent-primary);
+      color: white;
+    }
+
+    .btn-primary:hover {
+      background: var(--accent-hover);
+      transform: translateY(-2px);
+      box-shadow: var(--shadow-md);
+    }
+
+    .btn-success {
+      background: var(--accent-success);
+      color: white;
+    }
+
+    .btn-success:hover {
+      background: #059669;
+      transform: translateY(-2px);
+    }
+
+    .btn-danger {
+      background: var(--accent-error);
+      color: white;
+    }
+
+    .btn-danger:hover {
+      background: #dc2626;
+    }
+
+    .btn-secondary {
+      background: var(--bg-tertiary);
+      color: var(--text-primary);
+    }
+
+    .btn-secondary:hover {
+      background: var(--bg-hover);
+    }
+
+    /* ===== CARDS ===== */
+    .card {
+      background: var(--bg-secondary);
+      border-radius: var(--border-radius);
+      padding: 1.5rem;
+      margin-bottom: 1.5rem;
+      border: 1px solid var(--border-color);
+      box-shadow: var(--shadow-md);
+    }
+
+    .card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 1.5rem;
+      padding-bottom: 1rem;
+      border-bottom: 1px solid var(--border-color);
+    }
+
+    .card-title {
+      font-size: 1.25rem;
+      font-weight: 600;
+      color: var(--text-primary);
+    }
+
+    /* ===== FORMS ===== */
+    .form-group {
+      margin-bottom: 1.5rem;
+    }
+
+    .form-label {
+      display: block;
+      margin-bottom: 0.5rem;
+      color: var(--text-secondary);
+      font-weight: 500;
+      font-size: 0.875rem;
+    }
+
+    .form-input, .form-select, .form-textarea {
+      width: 100%;
+      padding: 0.75rem;
+      background: var(--bg-tertiary);
+      border: 1px solid var(--border-color);
+      border-radius: var(--border-radius-sm);
+      color: var(--text-primary);
+      font-size: 0.875rem;
+      transition: var(--transition);
+    }
+
+    .form-input:focus, .form-select:focus, .form-textarea:focus {
+      outline: none;
+      border-color: var(--accent-primary);
+      box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+    }
+
+    .form-textarea {
+      resize: vertical;
+      min-height: 100px;
+    }
+
+    .form-checkbox {
+      width: auto;
+      margin-right: 0.5rem;
+    }
+
+    .form-row {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 1rem;
+    }
+
+    /* ===== TABLE ===== */
+    .table-container {
+      overflow-x: auto;
+    }
+
+    .table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+
+    .table th {
+      background: var(--bg-tertiary);
+      padding: 1rem;
+      text-align: left;
+      font-weight: 600;
+      color: var(--text-secondary);
+      font-size: 0.875rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      border-bottom: 2px solid var(--border-color);
+    }
+
+    .table td {
+      padding: 1rem;
+      border-bottom: 1px solid var(--border-color);
+      color: var(--text-primary);
+    }
+
+    .table tbody tr {
+      transition: var(--transition);
+    }
+
+    .table tbody tr:hover {
+      background: var(--bg-tertiary);
+    }
+
+    /* ===== BADGES ===== */
+    .badge {
+      display: inline-block;
+      padding: 0.25rem 0.75rem;
+      border-radius: 9999px;
+      font-size: 0.75rem;
+      font-weight: 600;
+    }
+
+    .badge-success {
+      background: rgba(16, 185, 129, 0.2);
+      color: var(--accent-success);
+    }
+
+    .badge-error {
+      background: rgba(239, 68, 68, 0.2);
+      color: var(--accent-error);
+    }
+
+    .badge-warning {
+      background: rgba(245, 158, 11, 0.2);
+      color: var(--accent-warning);
+    }
+
+    /* ===== TOAST NOTIFICATIONS ===== */
+    .toast-container {
+      position: fixed;
+      top: 2rem;
+      right: 2rem;
+      z-index: 1000;
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+    }
+
+    .toast {
+      background: var(--bg-secondary);
+      border-radius: var(--border-radius-sm);
+      padding: 1rem 1.5rem;
+      box-shadow: var(--shadow-lg);
+      border-left: 4px solid var(--accent-primary);
+      min-width: 300px;
+      animation: slideIn 0.3s ease-out;
+    }
+
+    .toast-success {
+      border-left-color: var(--accent-success);
+    }
+
+    .toast-error {
+      border-left-color: var(--accent-error);
+    }
+
+    .toast-warning {
+      border-left-color: var(--accent-warning);
+    }
+
+    @keyframes slideIn {
+      from {
+        transform: translateX(100%);
+        opacity: 0;
+      }
+      to {
+        transform: translateX(0);
+        opacity: 1;
+      }
+    }
+
+    /* ===== MODAL ===== */
+    .modal-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.7);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 999;
+      animation: fadeIn 0.2s;
+    }
+
+    .modal-overlay.active {
+      display: flex;
+    }
+
+    .modal {
+      background: var(--bg-secondary);
+      border-radius: var(--border-radius);
+      padding: 2rem;
+      max-width: 600px;
+      width: 90%;
+      max-height: 90vh;
+      overflow-y: auto;
+      box-shadow: var(--shadow-lg);
+      animation: scaleIn 0.3s;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; }
+      to { opacity: 1; }
+    }
+
+    @keyframes scaleIn {
+      from {
+        transform: scale(0.9);
+        opacity: 0;
+      }
+      to {
+        transform: scale(1);
+        opacity: 1;
+      }
+    }
+
+    /* ===== LOADING ===== */
+    .loading {
+      display: inline-block;
+      width: 20px;
+      height: 20px;
+      border: 3px solid var(--bg-tertiary);
+      border-top-color: var(--accent-primary);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    /* ===== TABS ===== */
+    .tabs {
+      display: flex;
+      gap: 0.5rem;
+      margin-bottom: 1.5rem;
+      border-bottom: 2px solid var(--border-color);
+    }
+
+    .tab {
+      padding: 1rem 1.5rem;
+      background: none;
+      border: none;
+      color: var(--text-muted);
+      font-weight: 600;
+      cursor: pointer;
+      transition: var(--transition);
+      position: relative;
+    }
+
+    .tab.active {
+      color: var(--accent-primary);
+    }
+
+    .tab.active::after {
+      content: '';
+      position: absolute;
+      bottom: -2px;
+      left: 0;
+      right: 0;
+      height: 2px;
+      background: var(--accent-primary);
+    }
+
+    .tab:hover:not(.active) {
+      color: var(--text-secondary);
+    }
+
+    .tab-content {
+      display: none;
+    }
+
+    .tab-content.active {
+      display: block;
+    }
+
+    /* ===== RESPONSIVE ===== */
+    @media (max-width: 768px) {
+      .container {
+        padding: 1rem;
+      }
+
+      .header-content {
+        flex-direction: column;
+        align-items: flex-start;
+      }
+
+      .stats-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .form-row {
+        grid-template-columns: 1fr;
+      }
+
+      .toast-container {
+        left: 1rem;
+        right: 1rem;
+      }
+
+      .toast {
+        min-width: auto;
+      }
+    }
+
+    /* ===== UTILITIES ===== */
+    .hidden {
+      display: none !important;
+    }
+
+    .text-center {
+      text-align: center;
+    }
+
+    .mt-1 { margin-top: 0.5rem; }
+    .mt-2 { margin-top: 1rem; }
+    .mb-1 { margin-bottom: 0.5rem; }
+    .mb-2 { margin-bottom: 1rem; }
+
+    .flex {
+      display: flex;
+    }
+
+    .flex-between {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .gap-1 { gap: 0.5rem; }
+    .gap-2 { gap: 1rem; }
+
+    .w-full {
+      width: 100%;
+    }
+  </style>
+</head>
+<body>
+  <!-- Toast Container -->
+  <div class="toast-container" id="toastContainer"></div>
+
+  <!-- Main Container -->
+  <div class="container">
+    <!-- Header -->
+    <div class="header">
+      <div class="header-content">
+        <div>
+          <h1 class="header-title">RSSDI Dashboard</h1>
+          <p class="text-muted">RSS Discord Integration - Version 4.0.0</p>
+        </div>
+        <div class="flex gap-2">
+          <span class="header-version" id="statusBadge">Chargement...</span>
+          <button class="btn btn-primary" onclick="app.openNewFluxModal()">
+            + Nouveau Flux
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Stats Grid -->
+    <div class="stats-grid" id="statsGrid">
+      <div class="stat-card">
+        <div class="stat-card-header">
+          <span class="stat-card-title">Total Flux</span>
+          <span class="stat-card-icon">📡</span>
+        </div>
+        <div class="stat-card-value" id="statTotalFlux">-</div>
+        <div class="stat-card-trend" id="statActiveFlux">- actifs</div>
+      </div>
+
+      <div class="stat-card">
+        <div class="stat-card-header">
+          <span class="stat-card-title">Articles Envoyés</span>
+          <span class="stat-card-icon">📨</span>
+        </div>
+        <div class="stat-card-value" id="statTotalSent">-</div>
+        <div class="stat-card-trend">Total depuis le début</div>
+      </div>
+
+      <div class="stat-card">
+        <div class="stat-card-header">
+          <span class="stat-card-title">Scheduler</span>
+          <span class="stat-card-icon">⏰</span>
+        </div>
+        <div class="stat-card-value" id="statJobs">-</div>
+        <div class="stat-card-trend" id="statSchedulerStatus">-</div>
+      </div>
+
+      <div class="stat-card">
+        <div class="stat-card-header">
+          <span class="stat-card-title">Discord</span>
+          <span class="stat-card-icon">💬</span>
+        </div>
+        <div class="stat-card-value" id="statDiscordStatus">-</div>
+        <div class="stat-card-trend">État de la connexion</div>
+      </div>
+    </div>
+
+    <!-- Main Content -->
+    <div class="card">
+      <div class="tabs">
+        <button class="tab active" onclick="app.switchTab('fluxes')">📡 Flux RSS</button>
+        <button class="tab" onclick="app.switchTab('stats')">📊 Statistiques</button>
+        <button class="tab" onclick="app.switchTab('settings')">⚙️ Paramètres</button>
+      </div>
+
+      <!-- Tab: Flux RSS -->
+      <div id="tab-fluxes" class="tab-content active">
+        <div class="flex-between mb-2">
+          <div class="flex gap-1">
+            <button class="btn btn-secondary" onclick="app.loadFluxes()">🔄 Actualiser</button>
+            <button class="btn btn-secondary" onclick="app.filterFluxes('all')">Tous</button>
+            <button class="btn btn-success" onclick="app.filterFluxes('active')">Actifs</button>
+            <button class="btn btn-danger" onclick="app.filterFluxes('inactive')">Inactifs</button>
+          </div>
+        </div>
+
+        <div class="table-container">
+          <table class="table">
+            <thead>
+              <tr>
+                <th>Nom</th>
+                <th>Source</th>
+                <th>Statut</th>
+                <th>Catégorie</th>
+                <th>Envoyés</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="fluxesTableBody">
+              <tr>
+                <td colspan="6" class="text-center">
+                  <div class="loading"></div> Chargement...
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Tab: Stats -->
+      <div id="tab-stats" class="tab-content">
+        <h3 class="card-title mb-2">Statistiques Détaillées</h3>
+        <div id="detailedStats">
+          <p class="text-muted">Chargement des statistiques...</p>
+        </div>
+      </div>
+
+      <!-- Tab: Settings -->
+      <div id="tab-settings" class="tab-content">
+        <h3 class="card-title mb-2">Paramètres</h3>
+        <div class="form-group">
+          <label class="form-label">Mode Agressif</label>
+          <p class="text-muted mb-1">Force tous les flux à se vérifier toutes les 10 secondes</p>
+          <button class="btn btn-warning" id="toggleAggressiveMode" onclick="app.toggleAggressiveMode()">
+            Activer le Mode Agressif
+          </button>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Recharger le Scheduler</label>
+          <p class="text-muted mb-1">Recharge tous les jobs planifiés depuis la base de données</p>
+          <button class="btn btn-secondary" onclick="app.reloadScheduler()">
+            🔄 Recharger
+          </button>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Clé API</label>
+          <p class="text-muted mb-1">Gérer la clé API stockée localement</p>
+          <button class="btn btn-danger" onclick="app.resetApiKey()">
+            🔑 Réinitialiser la Clé API
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: Nouveau/Éditer Flux -->
+  <div class="modal-overlay" id="fluxModal">
+    <div class="modal">
+      <h2 class="card-title mb-2" id="modalTitle">Nouveau Flux RSS</h2>
+      <form id="fluxForm" onsubmit="app.submitFlux(event)">
+        <input type="hidden" id="flux_id">
+
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">Nom du Flux</label>
+            <input type="text" class="form-input" id="flux_name" required>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Type de Source</label>
+            <select class="form-select" id="flux_sourceType">
+              <option value="rss">RSS/Atom</option>
+              <option value="youtube">YouTube</option>
+              <option value="facebook">Facebook</option>
+              <option value="instagram">Instagram</option>
+              <option value="tiktok">TikTok</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">URL du Flux</label>
+          <input type="url" class="form-input" id="flux_rssUrl" required>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">ID Salon Discord</label>
+          <input type="text" class="form-input" id="flux_discordTarget" required pattern="[0-9]{17,20}">
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">Catégorie</label>
+            <input type="text" class="form-input" id="flux_category" placeholder="Actualités, Tech, etc.">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Intervalle (secondes)</label>
+            <input type="number" class="form-input" id="flux_interval" value="300" min="60">
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">Max par Run</label>
+            <input type="number" class="form-input" id="flux_maxPerRun" value="5" min="1" max="50">
+          </div>
+          <div class="form-group">
+            <label class="form-label">
+              <input type="checkbox" class="form-checkbox" id="flux_active" checked>
+              Actif
+            </label>
+            <br>
+            <label class="form-label">
+              <input type="checkbox" class="form-checkbox" id="flux_allowEmbeds">
+              Permettre les Embeds
+            </label>
+          </div>
+        </div>
+
+        <div class="flex gap-2 mt-2">
+          <button type="submit" class="btn btn-primary">
+            <span id="submitBtnText">Créer le Flux</span>
+          </button>
+          <button type="button" class="btn btn-secondary" onclick="app.closeModal()">
+            Annuler
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- JavaScript Application -->
+  <script>
+    class RSSIDashboard {
+      constructor() {
+        this.apiKey = localStorage.getItem('rssdi_api_key');
+        this.apiBase = `${window.location.protocol}//${window.location.hostname}:${window.location.port || 3000}/api/v1`;
+        this.currentFilter = 'all';
+        this.fluxes = [];
+        this.aggressiveMode = false;
+
+        this.init();
+      }
+
+      async init() {
+        if (!this.apiKey) {
+          this.apiKey = prompt('Veuillez entrer votre clé API:');
+          if (this.apiKey) {
+            localStorage.setItem('rssdi_api_key', this.apiKey);
+          } else {
+            this.showToast('Clé API requise', 'error');
+            return;
+          }
+        }
+
+        await this.loadStats();
+        await this.loadFluxes();
+        await this.checkDiscordStatus();
+      }
+
+      // API Helpers
+      async apiCall(endpoint, options = {}) {
+        const url = `${this.apiBase}${endpoint}`;
+        const config = {
+          ...options,
+          headers: {
+            'Content-Type': 'application/json',
+            'X-API-Key': this.apiKey,
+            ...options.headers
+          }
+        };
+
+        try {
+          const response = await fetch(url, config);
+          
+          if (response.status === 401) {
+            this.resetApiKey();
+            throw new Error('Clé API invalide');
+          }
+
+          if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.detail || 'Erreur API');
+          }
+
+          return await response.json();
+        } catch (error) {
+          console.error('API Error:', error);
+          throw error;
+        }
+      }
+
+      // Stats
+      async loadStats() {
+        try {
+          const stats = await this.apiCall('/stats');
+          
+          document.getElementById('statTotalFlux').textContent = stats.fluxes.total;
+          document.getElementById('statActiveFlux').textContent = `${stats.fluxes.active} actifs`;
+          document.getElementById('statTotalSent').textContent = stats.articles.total_sent.toLocaleString();
+          document.getElementById('statJobs').textContent = stats.scheduler.jobs_count;
+          document.getElementById('statSchedulerStatus').textContent = stats.scheduler.running ? 'En cours' : 'Arrêté';
+          
+          this.aggressiveMode = stats.scheduler.aggressive_mode;
+          this.updateAggressiveModeButton();
+
+          document.getElementById('statusBadge').textContent = '✅ Connecté';
+          document.getElementById('statusBadge').className = 'header-version';
+        } catch (error) {
+          document.getElementById('statusBadge').textContent = '❌ Erreur';
+          this.showToast('Erreur chargement stats', 'error');
+        }
+      }
+
+      async checkDiscordStatus() {
+        try {
+          const status = await this.apiCall('/discord/status');
+          const statusEl = document.getElementById('statDiscordStatus');
+          
+          if (status.status === 'success') {
+            statusEl.textContent = '✅ Connecté';
+            statusEl.style.color = 'var(--accent-success)';
+          } else {
+            statusEl.textContent = '❌ Erreur';
+            statusEl.style.color = 'var(--accent-error)';
+          }
+        } catch (error) {
+          document.getElementById('statDiscordStatus').textContent = '⚠️ Inconnu';
+        }
+      }
+
+      // Fluxes
+      async loadFluxes() {
+        try {
+          this.fluxes = await this.apiCall('/fluxes');
+          this.renderFluxes();
+        } catch (error) {
+          this.showToast('Erreur chargement flux', 'error');
+          document.getElementById('fluxesTableBody').innerHTML = `
+            <tr><td colspan="6" class="text-center" style="color: var(--accent-error)">
+              ❌ Erreur: ${error.message}
+            </td></tr>
+          `;
+        }
+      }
+
+      renderFluxes() {
+        let filtered = this.fluxes;
+
+        if (this.currentFilter === 'active') {
+          filtered = this.fluxes.filter(f => f.active);
+        } else if (this.currentFilter === 'inactive') {
+          filtered = this.fluxes.filter(f => !f.active);
+        }
+
+        const tbody = document.getElementById('fluxesTableBody');
+        
+        if (filtered.length === 0) {
+          tbody.innerHTML = `
+            <tr><td colspan="6" class="text-center" style="color: var(--text-muted)">
+              Aucun flux trouvé
+            </td></tr>
+          `;
+          return;
+        }
+
+        tbody.innerHTML = filtered.map(flux => `
+          <tr>
+            <td><strong>${flux.name || 'Sans nom'}</strong></td>
+            <td><span class="badge badge-success">${flux.sourceType || 'rss'}</span></td>
+            <td>
+              <span class="badge ${flux.active ? 'badge-success' : 'badge-error'}">
+                ${flux.active ? '✓ Actif' : '✗ Inactif'}
+              </span>
+            </td>
+            <td>${flux.category || '-'}</td>
+            <td>${flux.totalSent || 0}</td>
+            <td>
+              <div class="flex gap-1">
+                <button class="btn btn-secondary" onclick="app.editFlux('${flux.id}')" title="Éditer">
+                  ✏️
+                </button>
+                <button class="btn btn-success" onclick="app.checkFluxNow('${flux.id}')" title="Vérifier">
+                  ▶️
+                </button>
+                <button class="btn btn-danger" onclick="app.deleteFlux('${flux.id}')" title="Supprimer">
+                  🗑️
+                </button>
+              </div>
+            </td>
+          </tr>
+        `).join('');
+      }
+
+      filterFluxes(filter) {
+        this.currentFilter = filter;
+        this.renderFluxes();
+      }
+
+      async checkFluxNow(id) {
+        try {
+          this.showToast('Vérification en cours...', 'warning');
+          const result = await this.apiCall(`/fluxes/${id}/check`, { method: 'POST' });
+          this.showToast(result.message, 'success');
+          await this.loadStats();
+        } catch (error) {
+          this.showToast(`Erreur: ${error.message}`, 'error');
+        }
+      }
+
+      async deleteFlux(id) {
+        if (!confirm('Êtes-vous sûr de vouloir supprimer ce flux ?')) return;
+
+        try {
+          await this.apiCall(`/fluxes/${id}`, { method: 'DELETE' });
+          this.showToast('Flux supprimé', 'success');
+          await this.loadFluxes();
+          await this.loadStats();
+        } catch (error) {
+          this.showToast(`Erreur: ${error.message}`, 'error');
+        }
+      }
+
+      // Modal
+      openNewFluxModal() {
+        document.getElementById('modalTitle').textContent = 'Nouveau Flux RSS';
+        document.getElementById('submitBtnText').textContent = 'Créer le Flux';
+        document.getElementById('fluxForm').reset();
+        document.getElementById('flux_id').value = '';
+        document.getElementById('flux_active').checked = true;
+        document.getElementById('fluxModal').classList.add('active');
+      }
+
+      async editFlux(id) {
+        const flux = this.fluxes.find(f => f.id === id);
+        if (!flux) return;
+
+        document.getElementById('modalTitle').textContent = 'Éditer le Flux';
+        document.getElementById('submitBtnText').textContent = 'Mettre à Jour';
+        document.getElementById('flux_id').value = flux.id;
+        document.getElementById('flux_name').value = flux.name || '';
+        document.getElementById('flux_sourceType').value = flux.sourceType || 'rss';
+        document.getElementById('flux_rssUrl').value = flux.rssUrl || '';
+        document.getElementById('flux_discordTarget').value = flux.discordTarget || '';
+        document.getElementById('flux_category').value = flux.category || '';
+        document.getElementById('flux_interval').value = flux.interval || 300;
+        document.getElementById('flux_maxPerRun').value = flux.maxPerRun || 5;
+        document.getElementById('flux_active').checked = flux.active !== false;
+        document.getElementById('flux_allowEmbeds').checked = flux.allowEmbeds === true;
+        
+        document.getElementById('fluxModal').classList.add('active');
+      }
+
+      closeModal() {
+        document.getElementById('fluxModal').classList.remove('active');
+      }
+
+      async submitFlux(event) {
+        event.preventDefault();
+
+        const id = document.getElementById('flux_id').value;
+        const data = {
+          name: document.getElementById('flux_name').value,
+          sourceType: document.getElementById('flux_sourceType').value,
+          rssUrl: document.getElementById('flux_rssUrl').value,
+          discordTarget: document.getElementById('flux_discordTarget').value,
+          category: document.getElementById('flux_category').value || null,
+          interval: parseInt(document.getElementById('flux_interval').value),
+          maxPerRun: parseInt(document.getElementById('flux_maxPerRun').value),
+          active: document.getElementById('flux_active').checked,
+          allowEmbeds: document.getElementById('flux_allowEmbeds').checked
+        };
+
+        try {
+          if (id) {
+            await this.apiCall(`/fluxes/${id}`, {
+              method: 'PUT',
+              body: JSON.stringify(data)
+            });
+            this.showToast('Flux mis à jour', 'success');
+          } else {
+            await this.apiCall('/fluxes', {
+              method: 'POST',
+              body: JSON.stringify(data)
+            });
+            this.showToast('Flux créé', 'success');
+          }
+
+          this.closeModal();
+          await this.loadFluxes();
+          await this.loadStats();
+        } catch (error) {
+          this.showToast(`Erreur: ${error.message}`, 'error');
+        }
+      }
+
+      // Tabs
+      switchTab(tabName) {
+        document.querySelectorAll('.tab').forEach(tab => tab.classList.remove('active'));
+        document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
+
+        event.target.classList.add('active');
+        document.getElementById(`tab-${tabName}`).classList.add('active');
+
+        if (tabName === 'stats') {
+          this.loadDetailedStats();
+        }
+      }
+
+      async loadDetailedStats() {
+        try {
+          const [categories, topFluxes] = await Promise.all([
+            this.apiCall('/stats/categories'),
+            this.apiCall('/stats/top-fluxes?limit=10')
+          ]);
+
+          let html = '<h4 class="mb-2">Par Catégorie</h4>';
+          html += '<div class="stats-grid">';
+          
+          Object.entries(categories.categories).forEach(([name, data]) => {
+            html += `
+              <div class="stat-card">
+                <div class="stat-card-title">${name}</div>
+                <div class="stat-card-value">${data.count}</div>
+                <div class="stat-card-trend">${data.total_sent} articles envoyés</div>
+              </div>
+            `;
+          });
+          
+          html += '</div>';
+          html += '<h4 class="mb-2 mt-2">Top 10 Flux</h4>';
+          html += '<div class="table-container"><table class="table"><thead><tr><th>Nom</th><th>Catégorie</th><th>Envoyés</th></tr></thead><tbody>';
+          
+          topFluxes.forEach(flux => {
+            html += `
+              <tr>
+                <td>${flux.name}</td>
+                <td>${flux.category || '-'}</td>
+                <td><strong>${flux.total_sent}</strong></td>
+              </tr>
+            `;
+          });
+          
+          html += '</tbody></table></div>';
+          
+          document.getElementById('detailedStats').innerHTML = html;
+        } catch (error) {
+          document.getElementById('detailedStats').innerHTML = `
+            <p class="text-center" style="color: var(--accent-error)">Erreur: ${error.message}</p>
+          `;
+        }
+      }
+
+      // Settings
+      async toggleAggressiveMode() {
+        try {
+          const result = await this.apiCall(`/stats/scheduler/aggressive-mode?enabled=${!this.aggressiveMode}`, {
+            method: 'POST'
+          });
+          
+          this.aggressiveMode = result.aggressive_mode;
+          this.updateAggressiveModeButton();
+          this.showToast(
+            this.aggressiveMode ? 'Mode agressif activé' : 'Mode agressif désactivé',
+            'success'
+          );
+          await this.loadStats();
+        } catch (error) {
+          this.showToast(`Erreur: ${error.message}`, 'error');
+        }
+      }
+
+      updateAggressiveModeButton() {
+        const btn = document.getElementById('toggleAggressiveMode');
+        if (this.aggressiveMode) {
+          btn.textContent = 'Désactiver le Mode Agressif';
+          btn.className = 'btn btn-danger';
+        } else {
+          btn.textContent = 'Activer le Mode Agressif';
+          btn.className = 'btn btn-warning';
+        }
+      }
+
+      async reloadScheduler() {
+        try {
+          this.showToast('Rechargement...', 'warning');
+          const result = await this.apiCall('/stats/scheduler/reload', { method: 'POST' });
+          this.showToast(`${result.scheduled_count} flux rechargés`, 'success');
+          await this.loadStats();
+        } catch (error) {
+          this.showToast(`Erreur: ${error.message}`, 'error');
+        }
+      }
+
+      resetApiKey() {
+        if (confirm('Êtes-vous sûr de vouloir réinitialiser la clé API ?')) {
+          localStorage.removeItem('rssdi_api_key');
+          window.location.reload();
+        }
+      }
+
+      // Toast Notifications
+      showToast(message, type = 'success') {
+        const container = document.getElementById('toastContainer');
+        const toast = document.createElement('div');
+        toast.className = `toast toast-${type}`;
+        toast.textContent = message;
+        
+        container.appendChild(toast);
+        
+        setTimeout(() => {
+          toast.style.animation = 'slideIn 0.3s ease-out reverse';
+          setTimeout(() => toast.remove(), 300);
+        }, 3000);
+      }
+    }
+
+    // Initialize app
+    const app = new RSSIDashboard();
+
+    // Close modal on overlay click
+    document.getElementById('fluxModal').addEventListener('click', (e) => {
+      if (e.target.id === 'fluxModal') {
+        app.closeModal();
+      }
+    });
+  </script>
+</body>
+</html>
